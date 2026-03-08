@@ -137,7 +137,7 @@ func (h *AuthHandler) FirebaseLogin(c *gin.Context) {
 		return
 	}
 
-	token, err := utils.VerifyFirebaseIDToken(c.Request.Context(), h.cfg, req.IDToken)
+	firebaseToken, err := utils.VerifyFirebaseIDToken(c.Request.Context(), h.cfg, req.IDToken)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not configured") {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "firebase auth is not configured"})
@@ -147,8 +147,7 @@ func (h *AuthHandler) FirebaseLogin(c *gin.Context) {
 		return
 	}
 
-	email, _ := token.Claims["email"].(string)
-	email = strings.ToLower(strings.TrimSpace(email))
+	email := strings.ToLower(strings.TrimSpace(firebaseToken.Email))
 	if email == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "firebase token missing email"})
 		return
@@ -167,7 +166,7 @@ func (h *AuthHandler) FirebaseLogin(c *gin.Context) {
 			role = models.RoleAgency
 		}
 
-		generatedPassword, hashErr := utils.HashPassword("firebase-user-" + token.UID)
+		generatedPassword, hashErr := utils.HashPassword("firebase-user-" + firebaseToken.UID)
 		if hashErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare user"})
 			return
