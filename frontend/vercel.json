@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/health",
+      "destination": "https://simple-flow.onrender.com/health"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://simple-flow.onrender.com/api/:path*"
     },
