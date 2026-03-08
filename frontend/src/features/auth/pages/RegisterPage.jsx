@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
+import { registerWithEmailFirebase } from '../../../shared/lib/firebase'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -41,6 +42,17 @@ export default function RegisterPage() {
       }
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function onCreateWithFirebaseEmail() {
+    setMessage('')
+    setError('')
+    try {
+      const credential = await registerWithEmailFirebase(form.email, form.password)
+      setMessage(`Firebase account created for ${credential.user.email}.`)
+    } catch (err) {
+      setError(err.message || 'Firebase account creation failed.')
     }
   }
 
@@ -118,6 +130,11 @@ export default function RegisterPage() {
             )}
             <button className="btn" type="submit">Register</button>
           </form>
+
+          <div className="auth-divider"><span>or</span></div>
+          <div className="auth-provider-buttons">
+            <button className="btn secondary" type="button" onClick={onCreateWithFirebaseEmail}>Continue with Email (Firebase)</button>
+          </div>
 
           <p className="muted auth-switch">Already have an account? <Link to="/login">Go to login</Link></p>
         </article>

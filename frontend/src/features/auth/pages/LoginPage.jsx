@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
+import { signInWithEmailFirebase, signInWithGoogleFirebase } from '../../../shared/lib/firebase'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -22,6 +23,28 @@ export default function LoginPage() {
       navigate('/dashboard')
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function onContinueWithGoogle() {
+    setMessage('')
+    setError('')
+    try {
+      const credential = await signInWithGoogleFirebase()
+      setMessage(`Firebase Google sign-in successful for ${credential.user.email}.`)
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.')
+    }
+  }
+
+  async function onContinueWithEmailFirebase() {
+    setMessage('')
+    setError('')
+    try {
+      const credential = await signInWithEmailFirebase(form.email, form.password)
+      setMessage(`Firebase email sign-in successful for ${credential.user.email}.`)
+    } catch (err) {
+      setError(err.message || 'Firebase email sign-in failed.')
     }
   }
 
@@ -65,6 +88,12 @@ export default function LoginPage() {
             />
             <button className="btn" type="submit">Login</button>
           </form>
+
+          <div className="auth-divider"><span>or</span></div>
+          <div className="auth-provider-buttons">
+            <button className="btn secondary" type="button" onClick={onContinueWithGoogle}>Continue with Google</button>
+            <button className="btn secondary" type="button" onClick={onContinueWithEmailFirebase}>Continue with Email (Firebase)</button>
+          </div>
           <p className="muted auth-switch">No account yet? <Link to="/register">Create one</Link></p>
         </article>
       </section>
