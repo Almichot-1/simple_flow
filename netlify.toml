@@ -1,0 +1,24 @@
+[build]
+  base = "frontend"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+# Proxy API calls to Render backend to avoid browser CORS issues.
+[[redirects]]
+  from = "/api/*"
+  to = "https://simple-flow.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# React Router SPA fallback for deep links like /dashboard and /maids/:id
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

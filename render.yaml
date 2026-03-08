@@ -20,7 +20,7 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://simflowforu.netlify.app,https://main--simflowforu.netlify.app,http://localhost:5173
 
   - type: web
     name: maidshowcase-frontend
