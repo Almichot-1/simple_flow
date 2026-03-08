@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
-import { signInWithGoogleFirebase } from '../../../shared/lib/firebase'
+import { getFirebaseRuntimeSummary, signInWithGoogleFirebase } from '../../../shared/lib/firebase'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
 export default function LoginPage() {
@@ -38,8 +38,9 @@ export default function LoginPage() {
       navigate('/dashboard')
     } catch (err) {
       if (err?.code === 'auth/unauthorized-domain') {
+        const runtime = getFirebaseRuntimeSummary()
         setError(
-          `Google sign-in blocked for domain: ${window.location.hostname}. Add this host in Firebase Auth -> Authorized domains for project simpflow-70fc0.`,
+          `Google sign-in blocked for domain: ${window.location.hostname}. Runtime config => projectId=${runtime.projectId}, authDomain=${runtime.authDomain}, apiKey=${runtime.apiKeyMasked}. Add this domain in Firebase Auth -> Authorized domains for that exact project.`,
         )
         return
       }

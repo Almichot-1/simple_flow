@@ -22,6 +22,22 @@ const firebaseConfig = {
   measurementId: env('VITE_FIREBASE_MEASUREMENT_ID'),
 }
 
+function maskApiKey(apiKey) {
+  const value = String(apiKey || '')
+  if (value.length <= 8) {
+    return value
+  }
+  return `${value.slice(0, 4)}...${value.slice(-4)}`
+}
+
+export function getFirebaseRuntimeSummary() {
+  return {
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain,
+    apiKeyMasked: maskApiKey(firebaseConfig.apiKey),
+  }
+}
+
 let analyticsInstance = null
 let authInstance = null
 let googleProvider = null
