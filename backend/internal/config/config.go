@@ -15,6 +15,9 @@ type Config struct {
 	AdminEmail     string
 	AdminPassword  string
 	AllowedOrigins string
+	FirebaseProjectID  string
+	FirebaseClientEmail string
+	FirebasePrivateKey  string
 }
 
 func Load() Config {
@@ -28,6 +31,9 @@ func Load() Config {
 		AdminEmail:     getEnv("ADMIN_EMAIL", "admin@maidshowcase.com"),
 		AdminPassword:  getEnv("ADMIN_PASSWORD", "Admin123!"),
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		FirebaseProjectID:  getEnv("FIREBASE_PROJECT_ID", ""),
+		FirebaseClientEmail: getEnv("FIREBASE_CLIENT_EMAIL", ""),
+		FirebasePrivateKey:  getEnv("FIREBASE_PRIVATE_KEY", ""),
 	}
 }
 

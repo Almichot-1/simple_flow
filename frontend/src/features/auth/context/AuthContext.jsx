@@ -8,7 +8,27 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredUser())
 
   async function login(credentials) {
-    const data = await apiRequest('/login', { method: 'POST', body: credentials })
+    const normalized = {
+      ...credentials,
+      email: String(credentials?.email || '').trim().toLowerCase(),
+    }
+    const data = await apiRequest('/login', { method: 'POST', body: normalized })
+    setToken(data.access_token)
+    setUser(data.user)
+    storeAuth(data.access_token, data.user)
+    return data
+  }
+
+  async function loginWithFirebase(idToken, profile = {}) {
+    const data = await apiRequest('/login/firebase', {
+      method: 'POST',
+      body: {
+        id_token: idToken,
+        role: profile.role,
+        country: profile.country,
+        phone: profile.phone,
+      },
+    })
     setToken(data.access_token)
     setUser(data.user)
     storeAuth(data.access_token, data.user)
@@ -26,6 +46,7 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated: Boolean(token),
     login,
+    loginWithFirebase,
     logout,
   }), [token, user])
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -33,6 +34,13 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+type FirebaseLoginRequest struct {
+	IDToken string `json:"id_token" binding:"required"`
+	Role    string `json:"role" binding:"omitempty,oneof=AGENCY EMPLOYER"`
+	Country string `json:"country"`
+	Phone   string `json:"phone"`
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -113,6 +121,100 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": token,
+		"user": gin.H{
+			"id":       user.ID,
+			"email":    user.Email,
+			"role":     user.Role,
+			"verified": user.Verified,
+		},
+	})
+}
+
+func (h *AuthHandler) FirebaseLogin(c *gin.Context) {
+	var req FirebaseLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	token, err := utils.VerifyFirebaseIDToken(c.Request.Context(), h.cfg, req.IDToken)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not configured") {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "firebase auth is not configured"})
+			return
+		}
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid firebase token"})
+		return
+	}
+
+	email, _ := token.Claims["email"].(string)
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "firebase token missing email"})
+		return
+	}
+
+	var user models.User
+	findErr := h.db.Where("email = ?", email).First(&user).Error
+	if findErr != nil {
+		if !errors.Is(findErr, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to lookup user"})
+			return
+		}
+
+		role := models.RoleEmployer
+		if req.Role == models.RoleAgency {
+			role = models.RoleAgency
+		}
+
+		generatedPassword, hashErr := utils.HashPassword("firebase-user-" + token.UID)
+		if hashErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare user"})
+			return
+		}
+
+		user = models.User{
+			Email:        email,
+			PasswordHash: generatedPassword,
+			Role:         role,
+			Verified:     role == models.RoleEmployer,
+		}
+
+		if err = h.db.Create(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+			return
+		}
+
+		if role == models.RoleAgency {
+			agency := models.AgencyProfile{
+				UserID:             user.ID,
+				Country:            req.Country,
+				Phone:              req.Phone,
+				SubscriptionStatus: models.SubStatusPending,
+			}
+			if err = h.db.Create(&agency).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create agency profile"})
+				return
+			}
+		}
+	}
+
+	if user.Role == models.RoleAgency && !user.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"error": "agency not approved by admin yet"})
+		return
+	}
+
+	user.LastLogin = time.Now()
+	h.db.Save(&user)
+
+	appToken, tokenErr := utils.GenerateToken(h.cfg.JWTSecret, h.cfg.JWTExpiryMins, user.ID, user.Role, user.Email)
+	if tokenErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": appToken,
 		"user": gin.H{
 			"id":       user.ID,
 			"email":    user.Email,
