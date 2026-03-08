@@ -21,3 +21,15 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+
+  - type: web
+    name: maidshowcase-frontend
+    env: static
+    rootDir: frontend
+    plan: free
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_API_URL
+        value: https://simple-flow.onrender.com/api

@@ -93,6 +93,28 @@ Notes:
 - Render usually provides `PORT` automatically. Backend now accepts both `10000` and `:10000` formats.
 - Current uploads are local disk; data in `/uploads` is not durable across instance restarts.
 
+### Frontend deployment (Render static site)
+
+`render.yaml` now includes a frontend static service:
+
+- Service name: `maidshowcase-frontend`
+- Root directory: `frontend`
+- Build command: `npm ci && npm run build`
+- Publish directory: `dist`
+- `VITE_API_URL`: `https://simple-flow.onrender.com/api`
+
+After frontend deploy completes:
+
+1. Copy frontend URL from Render (for example `https://maidshowcase-frontend.onrender.com`).
+2. Update backend env var `ALLOWED_ORIGINS` to include that domain.
+  Example:
+
+```env
+ALLOWED_ORIGINS=http://localhost:5173,https://maidshowcase-frontend.onrender.com
+```
+
+3. Redeploy backend after changing `ALLOWED_ORIGINS`.
+
 Backend deploy env vars must include:
 - `DATABASE_URL`
 - `JWT_SECRET`
