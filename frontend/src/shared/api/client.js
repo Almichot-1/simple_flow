@@ -1,6 +1,6 @@
 const API_BASE =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? '/api' : 'http://localhost:8080/api')
+  (import.meta.env.PROD ? 'https://simple-flow.onrender.com/api' : 'http://localhost:8080/api')
 
 export const apiBase = API_BASE
 export const apiOrigin = API_BASE.replace(/\/api\/?$/, '')
