@@ -11,6 +11,19 @@ const queryClient = new QueryClient()
 
 void initFirebase()
 
+const CANONICAL_PROD_HOST = 'simple-flow-rho.vercel.app'
+
+if (
+  import.meta.env.PROD &&
+  window.location.hostname.endsWith('.vercel.app') &&
+  window.location.hostname !== CANONICAL_PROD_HOST
+) {
+  // Keep auth operations on one whitelisted host to avoid OAuth domain mismatches.
+  window.location.replace(
+    `https://${CANONICAL_PROD_HOST}${window.location.pathname}${window.location.search}${window.location.hash}`,
+  )
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
