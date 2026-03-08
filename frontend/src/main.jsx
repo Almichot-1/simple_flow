@@ -9,8 +9,6 @@ import initFirebase from './shared/lib/firebase'
 
 const queryClient = new QueryClient()
 
-void initFirebase()
-
 const CANONICAL_PROD_HOST = 'simple-flow-rho.vercel.app'
 
 if (
@@ -23,6 +21,8 @@ if (
     `https://${CANONICAL_PROD_HOST}${window.location.pathname}${window.location.search}${window.location.hash}`,
   )
 }
+
+void initFirebase()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
