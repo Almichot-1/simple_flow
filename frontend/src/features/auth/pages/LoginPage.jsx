@@ -37,6 +37,12 @@ export default function LoginPage() {
       setMessage(`Google sign-in successful for ${credential.user.email}.`)
       navigate('/dashboard')
     } catch (err) {
+      if (err?.code === 'auth/unauthorized-domain') {
+        setError(
+          `Google sign-in blocked for domain: ${window.location.hostname}. Add this host in Firebase Auth -> Authorized domains for project simpflow-70fc0.`,
+        )
+        return
+      }
       setError(err.message || 'Google sign-in failed.')
     }
   }
