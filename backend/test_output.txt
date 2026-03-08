@@ -1,0 +1,10 @@
+--- FAIL: TestGetMaids (0.00s)
+    mock_router_test.go:78: Expected status code 200, got 401
+--- FAIL: TestAgencyManageMaids (0.00s)
+    mock_router_test.go:94: POST Expected status code 200/201, got 401
+    mock_router_test.go:103: GET Expected status code 200, got 401
+--- FAIL: TestAdminSubscriptionsRoute (0.00s)
+    mock_router_test.go:118: Expected status code 200, got 401
+FAIL
+FAIL	maidshowcase-api/internal/server	4.937s
+FAIL

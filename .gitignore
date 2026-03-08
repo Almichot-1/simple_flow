@@ -1,0 +1,24 @@
+# Local env files
+backend/.env
+frontend/.env
+
+# Binaries and build outputs
+*.exe
+backend/bin/
+backend/dist/
+frontend/dist/
+
+# Dependencies
+frontend/node_modules/
+
+# Runtime uploads and temp artifacts
+backend/uploads/
+supabase/.temp/
+
+# Local tool metadata
+.lh/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
