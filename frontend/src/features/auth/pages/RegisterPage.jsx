@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
-import { registerWithEmailFirebase } from '../../../shared/lib/firebase'
+import brandLogo from '../../../assets/simflow-logo.svg'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -45,21 +45,16 @@ export default function RegisterPage() {
     }
   }
 
-  async function onCreateWithFirebaseEmail() {
-    setMessage('')
-    setError('')
-    try {
-      const credential = await registerWithEmailFirebase(form.email, form.password)
-      setMessage(`Firebase account created for ${credential.user.email}.`)
-    } catch (err) {
-      setError(err.message || 'Firebase account creation failed.')
-    }
-  }
-
   return (
     <main className="app auth-page">
       <header className="hero">
-        <h1>Domestic Worker Showcase</h1>
+        <div className="brand-row">
+          <img className="brand-logo" src={brandLogo} alt="SimFlow logo" />
+          <div>
+            <p className="brand-kicker">SimFlow</p>
+            <h1>Domestic Worker Showcase</h1>
+          </div>
+        </div>
         <p>Employers can login immediately. Agency accounts require admin approval.</p>
       </header>
       <section className="grid two auth-grid">
@@ -130,11 +125,6 @@ export default function RegisterPage() {
             )}
             <button className="btn" type="submit">Register</button>
           </form>
-
-          <div className="auth-divider"><span>or</span></div>
-          <div className="auth-provider-buttons">
-            <button className="btn secondary" type="button" onClick={onCreateWithFirebaseEmail}>Continue with Email (Firebase)</button>
-          </div>
 
           <p className="muted auth-switch">Already have an account? <Link to="/login">Go to login</Link></p>
         </article>

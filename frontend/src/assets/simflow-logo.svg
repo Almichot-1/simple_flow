@@ -1,0 +1,40 @@
+<svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logoTitle logoDesc">
+  <title id="logoTitle">SimFlow Logo</title>
+  <desc id="logoDesc">Professional shield and flow mark with SF monogram.</desc>
+  <defs>
+    <linearGradient id="shieldGradient" x1="18" y1="22" x2="198" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A4F78"/>
+      <stop offset="1" stop-color="#0B8F7A"/>
+    </linearGradient>
+    <linearGradient id="sparkGradient" x1="78" y1="58" x2="150" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FBFF"/>
+      <stop offset="1" stop-color="#CDEBF8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#063352" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <path
+    d="M110 12L184 38C190 40 194 46 194 52V108C194 151 168 190 126 208L113 214C111 215 109 215 107 214L94 208C52 190 26 151 26 108V52C26 46 30 40 36 38L110 12Z"
+    fill="url(#shieldGradient)"
+    filter="url(#softShadow)"
+  />
+
+  <path
+    d="M74 64C74 58 79 53 85 53H142L130 75H92V95H136L124 117H92V166H74V64Z"
+    fill="url(#sparkGradient)"
+  />
+
+  <path
+    d="M146 89C152 89 157 94 157 100C157 106 152 111 146 111H122L135 89H146Z"
+    fill="#F4FBFF"
+    opacity="0.95"
+  />
+
+  <path
+    d="M141 131C148 131 154 137 154 144C154 151 148 157 141 157H116L129 131H141Z"
+    fill="#E4F6FF"
+    opacity="0.92"
+  />
+</svg>

@@ -9,6 +9,7 @@ import {
   getMaidProfileLink,
   mediaUrl,
 } from '../../../shared/lib/helpers'
+import brandLogo from '../../../assets/simflow-logo.svg'
 
 const EXPERIENCE_OPTIONS = [
   { value: 0, label: '0 years (New)' },
@@ -133,6 +134,12 @@ export default function DashboardPage() {
     enabled: Boolean(token) && isAdmin,
   })
 
+  const pendingAgenciesQuery = useQuery({
+    queryKey: ['admin-pending-agencies', token],
+    queryFn: () => apiRequest('/admin/agencies/pending', { token }),
+    enabled: Boolean(token) && isAdmin,
+  })
+
   const visitStatsQuery = useQuery({
     queryKey: ['admin-visit-stats', token],
     queryFn: () => apiRequest('/admin/visit-stats', { token }),
@@ -141,7 +148,7 @@ export default function DashboardPage() {
 
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
 
-  const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || subscriptionsQuery.error || visitStatsQuery.error
+  const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || visitStatsQuery.error
   const displayError = error || (queryError && queryError.message !== 'Session expired. Please login again.' ? queryError.message : '')
 
   useEffect(() => {
@@ -276,6 +283,8 @@ export default function DashboardPage() {
     try {
       await apiRequest(`/admin/agencies/${adminAgencyId}/approve`, { method: 'PATCH', token })
       setMessage('Agency approved.')
+      setAdminAgencyId('')
+      queryClient.invalidateQueries({ queryKey: ['admin-pending-agencies', token] })
     } catch (err) {
       if (err.message === 'Session expired. Please login again.') {
         logout()
@@ -312,6 +321,7 @@ export default function DashboardPage() {
   }
 
   const adminSubscriptions = subscriptionsQuery.data || []
+  const pendingAgencies = pendingAgenciesQuery.data || []
   const pendingSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PENDING')
   const paidSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PAID')
   const failedSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'FAILED')
@@ -389,7 +399,13 @@ export default function DashboardPage() {
   return (
     <main className="app">
       <header className="hero">
-        <h1>Domestic Worker Showcase</h1>
+        <div className="brand-row">
+          <img className="brand-logo" src={brandLogo} alt="SimFlow logo" />
+          <div>
+            <p className="brand-kicker">SimFlow</p>
+            <h1>Domestic Worker Showcase</h1>
+          </div>
+        </div>
         <p>Simple, visual profiles for faster employer review and better agency presentation.</p>
         {user && (
           <div className="user-row">
@@ -675,6 +691,7 @@ export default function DashboardPage() {
               className="btn secondary"
               onClick={() => {
                 subscriptionsQuery.refetch()
+                pendingAgenciesQuery.refetch()
                 visitStatsQuery.refetch()
               }}
             >
@@ -687,6 +704,11 @@ export default function DashboardPage() {
               <p>Total Requests</p>
               <h3>{adminSubscriptions.length}</h3>
               <span className="metric-chip">Live</span>
+            </article>
+            <article className="admin-metric-card pending">
+              <p>Pending Agencies</p>
+              <h3>{pendingAgencies.length}</h3>
+              <span className="metric-chip">Needs approval</span>
             </article>
             <article className="admin-metric-card pending">
               <p>Pending Payments</p>
@@ -742,6 +764,55 @@ export default function DashboardPage() {
               <button className="btn" type="submit">Activate Subscription</button>
             </form>
           </div>
+
+          <article className="card elevated admin-table-panel">
+            <div className="section-head">
+              <h3>Pending Agency Registrations</h3>
+              <button className="btn secondary" onClick={() => pendingAgenciesQuery.refetch()}>Refresh Table</button>
+            </div>
+
+            {pendingAgenciesQuery.isLoading && <p className="muted">Loading pending agencies...</p>}
+            {!pendingAgenciesQuery.isLoading && pendingAgencies.length === 0 && (
+              <p className="muted">No pending agency registrations.</p>
+            )}
+
+            {pendingAgencies.length > 0 && (
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Agency ID</th>
+                      <th>Email</th>
+                      <th>Country</th>
+                      <th>Phone</th>
+                      <th>Registered</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingAgencies.slice(0, 20).map((agency) => (
+                      <tr key={agency.agency_id}>
+                        <td>#{agency.agency_id}</td>
+                        <td>{agency.email || '-'}</td>
+                        <td>{agency.country || '-'}</td>
+                        <td>{agency.phone || '-'}</td>
+                        <td>{formatRelativeDate(agency.created_at)}</td>
+                        <td>
+                          <button
+                            className="btn secondary table-action-btn"
+                            onClick={() => setAdminAgencyId(String(agency.agency_id))}
+                            type="button"
+                          >
+                            Use ID
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </article>
 
           <article className="card elevated admin-table-panel">
             <div className="section-head">

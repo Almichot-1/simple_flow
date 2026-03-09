@@ -15,6 +15,18 @@ type AdminHandler struct {
 	db *gorm.DB
 }
 
+type PendingAgencyRow struct {
+	AgencyID            uint       `json:"agency_id"`
+	UserID              uint       `json:"user_id"`
+	Email               string     `json:"email"`
+	Country             string     `json:"country"`
+	Phone               string     `json:"phone"`
+	Verified            bool       `json:"verified"`
+	SubscriptionStatus  string     `json:"subscription_status"`
+	SubscriptionEndDate *time.Time `json:"subscription_end_date"`
+	CreatedAt           time.Time  `json:"created_at"`
+}
+
 func NewAdminHandler(db *gorm.DB) *AdminHandler {
 	return &AdminHandler{db: db}
 }
@@ -36,6 +48,23 @@ func (h *AdminHandler) ApproveAgency(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "agency approved"})
+}
+
+func (h *AdminHandler) ListPendingAgencies(c *gin.Context) {
+	rows := make([]PendingAgencyRow, 0)
+
+	if err := h.db.Table("agency_profiles").
+		Select("agency_profiles.id AS agency_id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, users.verified, agency_profiles.subscription_status, agency_profiles.subscription_end_date, agency_profiles.created_at").
+		Joins("inner join users on users.id = agency_profiles.user_id").
+		Where("users.role = ?", models.RoleAgency).
+		Where("users.verified = ?", false).
+		Order("agency_profiles.created_at desc").
+		Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list pending agencies"})
+		return
+	}
+
+	c.JSON(http.StatusOK, rows)
 }
 
 func (h *AdminHandler) ListAllSubscriptions(c *gin.Context) {
