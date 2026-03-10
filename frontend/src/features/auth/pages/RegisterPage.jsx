@@ -14,12 +14,22 @@ export default function RegisterPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [registerStatus, setRegisterStatus] = useState(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const isStrongPassword =
+    form.password.length >= 10 &&
+    /[A-Z]/.test(form.password) &&
+    /[a-z]/.test(form.password) &&
+    /\d/.test(form.password) &&
+    /[^A-Za-z0-9]/.test(form.password)
 
   async function onSubmit(event) {
     event.preventDefault()
     setMessage('')
     setError('')
     setRegisterStatus(null)
+    setIsSubmitting(true)
     try {
       const payload = { ...form }
       if (payload.role !== 'AGENCY') {
@@ -42,6 +52,8 @@ export default function RegisterPage() {
       }
     } catch (err) {
       setError(err.message)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -87,16 +99,24 @@ export default function RegisterPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
             <label htmlFor="register-password">Password</label>
-            <input
-              id="register-password"
-              type="password"
-              placeholder="Password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
+            <div className="password-row">
+              <input
+                id="register-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                autoComplete="new-password"
+                minLength={10}
+                required
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+              <button className="btn secondary password-toggle" type="button" onClick={() => setShowPassword((prev) => !prev)}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <p className={`muted ${isStrongPassword ? 'ok' : ''}`}>
+              Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.
+            </p>
             <label htmlFor="register-role">Account type</label>
             <select id="register-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
               <option value="AGENCY">Agency</option>
@@ -123,7 +143,9 @@ export default function RegisterPage() {
                 />
               </>
             )}
-            <button className="btn" type="submit">Register</button>
+            <button className="btn" type="submit" disabled={isSubmitting || !isStrongPassword}>
+              {isSubmitting ? 'Creating account...' : 'Register'}
+            </button>
           </form>
 
           <p className="muted auth-switch">Already have an account? <Link to="/login">Go to login</Link></p>

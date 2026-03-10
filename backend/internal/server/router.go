@@ -60,6 +60,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 		admin.Use(middleware.AdminOnly())
 		{
 			admin.GET("/agencies/pending", adminHandler.ListPendingAgencies)
+			admin.GET("/agencies/activated", adminHandler.ListActivatedAgencies)
 			admin.PATCH("/agencies/:id/approve", adminHandler.ApproveAgency)
 			admin.GET("/subscriptions", adminHandler.ListAllSubscriptions)
 			admin.GET("/visit-stats", adminHandler.VisitStats)

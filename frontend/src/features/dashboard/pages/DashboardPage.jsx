@@ -87,6 +87,9 @@ export default function DashboardPage() {
   const [adminAgencyId, setAdminAgencyId] = useState('')
   const [adminSubscriptionId, setAdminSubscriptionId] = useState('')
   const [agencyWhatsappPhoneDraft, setAgencyWhatsappPhoneDraft] = useState('')
+  const [isApprovingAgency, setIsApprovingAgency] = useState(false)
+  const [isActivatingSubscription, setIsActivatingSubscription] = useState(false)
+  const [isSavingContact, setIsSavingContact] = useState(false)
 
   const isAgency = user?.role === 'AGENCY'
   const isAdmin = user?.role === 'ADMIN'
@@ -140,6 +143,12 @@ export default function DashboardPage() {
     enabled: Boolean(token) && isAdmin,
   })
 
+  const activatedAgenciesQuery = useQuery({
+    queryKey: ['admin-activated-agencies', token],
+    queryFn: () => apiRequest('/admin/agencies/activated', { token }),
+    enabled: Boolean(token) && isAdmin,
+  })
+
   const visitStatsQuery = useQuery({
     queryKey: ['admin-visit-stats', token],
     queryFn: () => apiRequest('/admin/visit-stats', { token }),
@@ -148,7 +157,7 @@ export default function DashboardPage() {
 
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
 
-  const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || visitStatsQuery.error
+  const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || activatedAgenciesQuery.error || visitStatsQuery.error
   const displayError = error || (queryError && queryError.message !== 'Session expired. Please login again.' ? queryError.message : '')
 
   useEffect(() => {
@@ -280,11 +289,13 @@ export default function DashboardPage() {
     event.preventDefault()
     setMessage('')
     setError('')
+    setIsApprovingAgency(true)
     try {
       await apiRequest(`/admin/agencies/${adminAgencyId}/approve`, { method: 'PATCH', token })
       setMessage('Agency approved.')
       setAdminAgencyId('')
       queryClient.invalidateQueries({ queryKey: ['admin-pending-agencies', token] })
+      queryClient.invalidateQueries({ queryKey: ['admin-activated-agencies', token] })
     } catch (err) {
       if (err.message === 'Session expired. Please login again.') {
         logout()
@@ -292,6 +303,8 @@ export default function DashboardPage() {
         return
       }
       setError(err.message)
+    } finally {
+      setIsApprovingAgency(false)
     }
   }
 
@@ -305,11 +318,13 @@ export default function DashboardPage() {
       return
     }
 
+    setIsActivatingSubscription(true)
     try {
       await apiRequest(`/admin/subscriptions/${adminSubscriptionId}/activate`, { method: 'PATCH', token })
       setMessage('Subscription activated.')
       setAdminSubscriptionId('')
       queryClient.invalidateQueries({ queryKey: ['admin-subscriptions', token] })
+      queryClient.invalidateQueries({ queryKey: ['admin-activated-agencies', token] })
     } catch (err) {
       if (err.message === 'Session expired. Please login again.') {
         logout()
@@ -317,13 +332,15 @@ export default function DashboardPage() {
         return
       }
       setError(err.message)
+    } finally {
+      setIsActivatingSubscription(false)
     }
   }
 
   const adminSubscriptions = subscriptionsQuery.data || []
   const pendingAgencies = pendingAgenciesQuery.data || []
+  const activatedAgencies = activatedAgenciesQuery.data || []
   const pendingSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PENDING')
-  const paidSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PAID')
   const failedSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'FAILED')
   const visitStats = visitStatsQuery.data || {}
   const topEmployers = visitStats.top_employers || []
@@ -332,6 +349,7 @@ export default function DashboardPage() {
     event.preventDefault()
     setMessage('')
     setError('')
+    setIsSavingContact(true)
     try {
       const data = await apiRequest('/agency/contact', {
         method: 'PATCH',
@@ -349,6 +367,8 @@ export default function DashboardPage() {
         return
       }
       setError(err.message)
+    } finally {
+      setIsSavingContact(false)
     }
   }
 
@@ -671,6 +691,7 @@ export default function DashboardPage() {
                 onChange={(e) => setAgencyWhatsappPhoneDraft(e.target.value)}
               />
               <button className="btn" type="submit">Save WhatsApp Number</button>
+              {isSavingContact && <p className="muted">Saving contact...</p>}
             </form>
             {agencyContactQuery.data?.whatsapp_url && (
               <a className="btn secondary" href={agencyContactQuery.data.whatsapp_url} target="_blank" rel="noreferrer">Open My WhatsApp Link</a>
@@ -692,10 +713,11 @@ export default function DashboardPage() {
               onClick={() => {
                 subscriptionsQuery.refetch()
                 pendingAgenciesQuery.refetch()
+                activatedAgenciesQuery.refetch()
                 visitStatsQuery.refetch()
               }}
             >
-              Refresh Analytics
+              {subscriptionsQuery.isFetching || pendingAgenciesQuery.isFetching || activatedAgenciesQuery.isFetching || visitStatsQuery.isFetching ? 'Refreshing...' : 'Refresh Analytics'}
             </button>
           </article>
 
@@ -716,8 +738,8 @@ export default function DashboardPage() {
               <span className="metric-chip">Needs action</span>
             </article>
             <article className="admin-metric-card success">
-              <p>Activated</p>
-              <h3>{paidSubscriptions.length}</h3>
+              <p>Activated Agencies</p>
+              <h3>{activatedAgencies.length}</h3>
               <span className="metric-chip">Healthy</span>
             </article>
             <article className="admin-metric-card danger">
@@ -753,7 +775,9 @@ export default function DashboardPage() {
               <p className="muted">Use agency profile ID after reviewing onboarding details.</p>
               <label htmlFor="admin-agency-id">Agency ID</label>
               <input id="admin-agency-id" placeholder="Agency ID" value={adminAgencyId} onChange={(e) => setAdminAgencyId(e.target.value)} />
-              <button className="btn" type="submit">Approve Agency</button>
+              <button className="btn" type="submit" disabled={isApprovingAgency}>
+                {isApprovingAgency ? 'Approving...' : 'Approve Agency'}
+              </button>
             </form>
 
             <form onSubmit={activateSubscription} className="card elevated admin-panel">
@@ -761,9 +785,54 @@ export default function DashboardPage() {
               <p className="muted">Apply payment approval by subscription ID.</p>
               <label htmlFor="admin-subscription-id">Subscription ID</label>
               <input id="admin-subscription-id" placeholder="Subscription ID" value={adminSubscriptionId} onChange={(e) => setAdminSubscriptionId(e.target.value)} />
-              <button className="btn" type="submit">Activate Subscription</button>
+              <button className="btn" type="submit" disabled={isActivatingSubscription}>
+                {isActivatingSubscription ? 'Activating...' : 'Activate Subscription'}
+              </button>
             </form>
           </div>
+
+          <article className="card elevated admin-table-panel">
+            <div className="section-head">
+              <h3>Activated Agencies Using Platform</h3>
+              <button className="btn secondary" onClick={() => activatedAgenciesQuery.refetch()}>Refresh Table</button>
+            </div>
+
+            {activatedAgenciesQuery.isLoading && <p className="muted">Loading activated agencies...</p>}
+            {!activatedAgenciesQuery.isLoading && activatedAgencies.length === 0 && (
+              <p className="muted">No activated agencies yet.</p>
+            )}
+
+            {activatedAgencies.length > 0 && (
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Agency ID</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th>Maid Profiles</th>
+                      <th>Last Login</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activatedAgencies.slice(0, 20).map((agency) => (
+                      <tr key={agency.agency_id}>
+                        <td>#{agency.agency_id}</td>
+                        <td>{agency.email || '-'}</td>
+                        <td>
+                          <span className={`status-tag status-${String(agency.subscription_status || '').toLowerCase()}`}>
+                            {agency.subscription_status || '-'}
+                          </span>
+                        </td>
+                        <td>{agency.maid_count ?? 0}</td>
+                        <td>{agency.last_login ? formatRelativeDate(agency.last_login) : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </article>
 
           <article className="card elevated admin-table-panel">
             <div className="section-head">

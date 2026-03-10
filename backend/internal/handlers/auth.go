@@ -50,6 +50,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	if !utils.ValidateStrongPassword(req.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "password must be at least 10 characters and include uppercase, lowercase, number, and symbol"})
+		return
+	}
+
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	hash, err := utils.HashPassword(req.Password)

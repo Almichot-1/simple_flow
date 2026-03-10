@@ -11,6 +11,9 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
 
   const maidPromptId = new URLSearchParams(location.search).get('maid')
 
@@ -18,18 +21,22 @@ export default function LoginPage() {
     event.preventDefault()
     setMessage('')
     setError('')
+    setIsSubmitting(true)
     try {
       await login(form)
       setMessage('Logged in successfully.')
       navigate('/dashboard')
     } catch (err) {
       setError(err.message)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   async function onContinueWithGoogle() {
     setMessage('')
     setError('')
+    setIsGoogleSubmitting(true)
     try {
       const credential = await signInWithGoogleFirebase()
       const idToken = await credential.user.getIdToken()
@@ -45,6 +52,8 @@ export default function LoginPage() {
         return
       }
       setError(err.message || 'Google sign-in failed.')
+    } finally {
+      setIsGoogleSubmitting(false)
     }
   }
 
@@ -83,21 +92,30 @@ export default function LoginPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
             <label htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              type="password"
-              placeholder="Password"
-              autoComplete="current-password"
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-            <button className="btn" type="submit">Login</button>
+            <div className="password-row">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                autoComplete="current-password"
+                required
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+              <button className="btn secondary password-toggle" type="button" onClick={() => setShowPassword((prev) => !prev)}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <button className="btn" type="submit" disabled={isSubmitting || isGoogleSubmitting}>
+              {isSubmitting ? 'Logging in...' : 'Login'}
+            </button>
           </form>
 
           <div className="auth-divider"><span>or</span></div>
           <div className="auth-provider-buttons">
-            <button className="btn secondary" type="button" onClick={onContinueWithGoogle}>Continue with Google</button>
+            <button className="btn secondary" type="button" onClick={onContinueWithGoogle} disabled={isSubmitting || isGoogleSubmitting}>
+              {isGoogleSubmitting ? 'Connecting to Google...' : 'Continue with Google'}
+            </button>
           </div>
           <p className="muted auth-switch">No account yet? <Link to="/register">Create one</Link></p>
         </article>

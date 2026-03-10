@@ -27,6 +27,19 @@ type PendingAgencyRow struct {
 	CreatedAt           time.Time  `json:"created_at"`
 }
 
+type ActivatedAgencyRow struct {
+	AgencyID            uint       `json:"agency_id"`
+	UserID              uint       `json:"user_id"`
+	Email               string     `json:"email"`
+	Country             string     `json:"country"`
+	Phone               string     `json:"phone"`
+	SubscriptionStatus  string     `json:"subscription_status"`
+	SubscriptionEndDate *time.Time `json:"subscription_end_date"`
+	LastLogin           time.Time  `json:"last_login"`
+	MaidCount           int64      `json:"maid_count"`
+	CreatedAt           time.Time  `json:"created_at"`
+}
+
 func NewAdminHandler(db *gorm.DB) *AdminHandler {
 	return &AdminHandler{db: db}
 }
@@ -61,6 +74,25 @@ func (h *AdminHandler) ListPendingAgencies(c *gin.Context) {
 		Order("agency_profiles.created_at desc").
 		Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list pending agencies"})
+		return
+	}
+
+	c.JSON(http.StatusOK, rows)
+}
+
+func (h *AdminHandler) ListActivatedAgencies(c *gin.Context) {
+	rows := make([]ActivatedAgencyRow, 0)
+
+	if err := h.db.Table("agency_profiles").
+		Select("agency_profiles.id AS agency_id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, agency_profiles.subscription_status, agency_profiles.subscription_end_date, users.last_login, COUNT(maid_profiles.id) AS maid_count, agency_profiles.created_at").
+		Joins("inner join users on users.id = agency_profiles.user_id").
+		Joins("left join maid_profiles on maid_profiles.agency_id = agency_profiles.id").
+		Where("users.role = ?", models.RoleAgency).
+		Where("users.verified = ?", true).
+		Group("agency_profiles.id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, agency_profiles.subscription_status, agency_profiles.subscription_end_date, users.last_login, agency_profiles.created_at").
+		Order("users.last_login desc").
+		Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list activated agencies"})
 		return
 	}
 
