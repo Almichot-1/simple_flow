@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"time"
 
 	"maidshowcase-api/internal/models"
 
@@ -36,34 +35,16 @@ func AgencyOnly(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		if !isSubscriptionWindowValid(agency) {
-			agency.SubscriptionStatus = models.SubStatusExpired
-			db.Save(&agency)
-		}
-
 		c.Set("agency_id", agency.ID)
-		c.Set("agency_subscription_status", agency.SubscriptionStatus)
+		// Subscription mode is temporarily disabled: approved agencies get full access.
+		c.Set("agency_subscription_status", models.SubStatusActive)
 		c.Next()
 	}
 }
 
 func ActiveSubscriptionOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		status := c.GetString("agency_subscription_status")
-		if status != models.SubStatusActive {
-			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{"error": "active subscription required"})
-			return
-		}
+		// Subscription mode is temporarily disabled.
 		c.Next()
 	}
-}
-
-func isSubscriptionWindowValid(agency models.AgencyProfile) bool {
-	if agency.SubscriptionStatus != models.SubStatusActive {
-		return true
-	}
-	if agency.SubscriptionEndDate == nil {
-		return false
-	}
-	return agency.SubscriptionEndDate.After(time.Now())
 }

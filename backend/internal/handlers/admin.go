@@ -33,6 +33,8 @@ type ActivatedAgencyRow struct {
 	Email               string     `json:"email"`
 	Country             string     `json:"country"`
 	Phone               string     `json:"phone"`
+	Blocked             bool       `json:"blocked"`
+	Banned              bool       `json:"banned"`
 	SubscriptionStatus  string     `json:"subscription_status"`
 	SubscriptionEndDate *time.Time `json:"subscription_end_date"`
 	LastLogin           time.Time  `json:"last_login"`
@@ -53,9 +55,27 @@ func (h *AdminHandler) ApproveAgency(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Model(&models.User{}).
-		Where("id = ?", agency.UserID).
-		Update("verified", true).Error; err != nil {
+	now := time.Now()
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.User{}).
+			Where("id = ?", agency.UserID).
+			Update("verified", true).Error; err != nil {
+			return err
+		}
+
+		// Subscription mode is temporarily disabled: mark approved agencies as active.
+		if err := tx.Model(&models.AgencyProfile{}).
+			Where("id = ?", agency.ID).
+			Updates(map[string]any{
+				"subscription_status":     models.SubStatusActive,
+				"subscription_start_date": now,
+				"subscription_end_date":   nil,
+			}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to approve agency"})
 		return
 	}
@@ -84,12 +104,12 @@ func (h *AdminHandler) ListActivatedAgencies(c *gin.Context) {
 	rows := make([]ActivatedAgencyRow, 0)
 
 	if err := h.db.Table("agency_profiles").
-		Select("agency_profiles.id AS agency_id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, agency_profiles.subscription_status, agency_profiles.subscription_end_date, users.last_login, COUNT(maid_profiles.id) AS maid_count, agency_profiles.created_at").
+		Select("agency_profiles.id AS agency_id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, users.blocked, users.banned, agency_profiles.subscription_status, agency_profiles.subscription_end_date, users.last_login, COUNT(maid_profiles.id) AS maid_count, agency_profiles.created_at").
 		Joins("inner join users on users.id = agency_profiles.user_id").
 		Joins("left join maid_profiles on maid_profiles.agency_id = agency_profiles.id").
 		Where("users.role = ?", models.RoleAgency).
 		Where("users.verified = ?", true).
-		Group("agency_profiles.id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, agency_profiles.subscription_status, agency_profiles.subscription_end_date, users.last_login, agency_profiles.created_at").
+		Group("agency_profiles.id, agency_profiles.user_id, users.email, agency_profiles.country, agency_profiles.phone, users.blocked, users.banned, agency_profiles.subscription_status, agency_profiles.subscription_end_date, users.last_login, agency_profiles.created_at").
 		Order("users.last_login desc").
 		Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list activated agencies"})
@@ -97,6 +117,82 @@ func (h *AdminHandler) ListActivatedAgencies(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, rows)
+}
+
+func (h *AdminHandler) BlockAgency(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+
+	var agency models.AgencyProfile
+	if err := h.db.First(&agency, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "agency not found"})
+		return
+	}
+
+	if err := h.db.Model(&models.User{}).
+		Where("id = ?", agency.UserID).
+		Update("blocked", true).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to block agency"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "agency blocked"})
+}
+
+func (h *AdminHandler) UnblockAgency(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+
+	var agency models.AgencyProfile
+	if err := h.db.First(&agency, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "agency not found"})
+		return
+	}
+
+	if err := h.db.Model(&models.User{}).
+		Where("id = ?", agency.UserID).
+		Update("blocked", false).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unblock agency"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "agency unblocked"})
+}
+
+func (h *AdminHandler) BanAgency(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+
+	var agency models.AgencyProfile
+	if err := h.db.First(&agency, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "agency not found"})
+		return
+	}
+
+	if err := h.db.Model(&models.User{}).
+		Where("id = ?", agency.UserID).
+		Updates(map[string]any{"banned": true, "blocked": true}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to ban agency"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "agency banned"})
+}
+
+func (h *AdminHandler) UnbanAgency(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+
+	var agency models.AgencyProfile
+	if err := h.db.First(&agency, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "agency not found"})
+		return
+	}
+
+	if err := h.db.Model(&models.User{}).
+		Where("id = ?", agency.UserID).
+		Updates(map[string]any{"banned": false, "blocked": false}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unban agency"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "agency unbanned"})
 }
 
 func (h *AdminHandler) ListAllSubscriptions(c *gin.Context) {
