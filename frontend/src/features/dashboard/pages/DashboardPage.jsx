@@ -932,6 +932,8 @@ export default function DashboardPage() {
     () => sortRows(adminSubscriptions, subscriptionSort),
     [adminSubscriptions, subscriptionSort],
   )
+  const visitStats = visitStatsQuery.data || {}
+  const topEmployers = useMemo(() => visitStats.top_employers || [], [visitStats.top_employers])
   const sortedTopEmployers = useMemo(
     () => sortRows(topEmployers, visitsSort),
     [topEmployers, visitsSort],
@@ -955,8 +957,6 @@ export default function DashboardPage() {
   )
   const pendingSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PENDING')
   const failedSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'FAILED')
-  const visitStats = visitStatsQuery.data || {}
-  const topEmployers = useMemo(() => visitStats.top_employers || [], [visitStats.top_employers])
   async function updateAgencyContact(event) {
     event.preventDefault()
     setMessage('')
