@@ -43,6 +43,46 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
+.hero-subtitle {
+  margin: 0.2rem 0 0.75rem;
+  max-width: 860px;
+}
+
+.hero-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+
+.hero-primary-cta {
+  width: auto;
+  margin: 0;
+  padding: 0.52rem 0.9rem;
+  background: #ffffff;
+  color: #0a4f78;
+  font-weight: 700;
+}
+
+.hero-trust-chips {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.14);
+  padding: 0.28rem 0.58rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f9fcff;
+}
+
 .card {
   border: 1px solid #d9e1ea;
   border-radius: 14px;
@@ -66,6 +106,10 @@
 
 .grid.four {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.grid.three {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .full {
@@ -388,6 +432,30 @@ li {
   padding: 0.35rem 0.7rem;
 }
 
+.save-profile-btn {
+  width: auto;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+}
+
+.role-grid {
+  margin-bottom: 1rem;
+}
+
+.role-panel {
+  margin-bottom: 0;
+}
+
+.role-score {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 1.8rem;
+  color: #145daa;
+}
+
+.role-list li {
+  padding: 0.45rem 0;
+}
+
 .maid-edit-grid {
   width: 100%;
   display: grid;
@@ -632,6 +700,16 @@ li {
   color: #166534;
 }
 
+.status-blocked {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-banned {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .status-failed {
   background: #fee2e2;
   color: #991b1b;
@@ -645,6 +723,47 @@ li {
 .table-action-btn {
   width: auto;
   padding: 0.35rem 0.65rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #d9e1ea;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+  padding: 1rem;
+}
+
+.modal-card h3 {
+  margin: 0 0 0.5rem;
+}
+
+.modal-card p {
+  margin: 0;
+  color: #475467;
+}
+
+.modal-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.modal-actions .btn {
+  width: auto;
+  margin: 0;
 }
 
 @media (max-width: 768px) {

@@ -110,6 +110,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	if user.Banned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account is banned"})
+		return
+	}
+
+	if user.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account is blocked by admin"})
+		return
+	}
+
 	if user.Role == models.RoleAgency && !user.Verified {
 		c.JSON(http.StatusForbidden, gin.H{"error": "agency not approved by admin yet"})
 		return
@@ -205,6 +215,16 @@ func (h *AuthHandler) FirebaseLogin(c *gin.Context) {
 
 	if user.Role == models.RoleAgency && !user.Verified {
 		c.JSON(http.StatusForbidden, gin.H{"error": "agency not approved by admin yet"})
+		return
+	}
+
+	if user.Banned {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account is banned"})
+		return
+	}
+
+	if user.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account is blocked by admin"})
 		return
 	}
 

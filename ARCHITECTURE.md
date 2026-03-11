@@ -1,268 +1,369 @@
-    # Maid Showcase MVP Architecture
+# Maid Showcase System Design
 
-    ## 1. Purpose and Scope
+## 1. Goal
 
-    Maid Showcase MVP is a two-tier web application that lets recruitment agencies publish domestic worker profiles and lets employers browse/contact agencies.
+This document explains how the system works end-to-end:
+- Frontend architecture
+- Backend architecture
+- Data model
+- Authentication and authorization
+- Deployment topology
+- Main request flows
 
-    Primary goals:
-    - Agency onboarding with approval workflow.
-    - Profile publishing with media upload support.
-    - Authenticated browsing and filtered search.
-    - Admin operations for agency approval and subscription activation.
-    - Public shareable profile page for each maid.
+## 2. Current Tech Stack
 
-    ## 2. Repository Layout
+- Frontend: React + Vite + React Router + React Query
+- Backend: Go + Gin + GORM
+- Database: PostgreSQL (Supabase)
+- Auth session: App JWT (backend-issued)
+- Optional identity provider: Firebase ID token -> backend token exchange
+- Hosting: Vercel/Netlify (frontend) + Render (backend) + Supabase (DB)
 
-    - `backend/`: Go API server (Gin + GORM + PostgreSQL)
-    - `frontend/`: React + Vite single-page app
-    - `docker-compose.yml`: local PostgreSQL service
-    - `uploads/`: uploaded profile assets (images/videos), served statically by backend
+## 3. High-Level Architecture
 
-    ## 3. High-Level System View
+```mermaid
+flowchart LR
+  subgraph Client
+    U[Employer / Agency / Admin Browser]
+    FE[React SPA\nfrontend/]
+  end
 
-    ```mermaid
-    flowchart LR
-    U[Browser User\nAgency/Admin/Employer] --> F[React Frontend\nVite app]
-    F -->|HTTP JSON + Bearer token| B[Go API\nGin Router]
-    B -->|ORM| D[(PostgreSQL)]
-    B --> S[/uploads static files/]
-    U -->|Shared profile URL| P[Public profile page\n/public/maids/:id]
-    P --> B
-    ```
+  subgraph API
+    BE[Go Gin API\nbackend/]
+    UP[/uploads static files/]
+  end
 
-    ## 4. Runtime Modes
+  subgraph Data
+    DB[(Supabase Postgres)]
+  end
 
-    The backend supports two execution modes selected by `MOCK_MODE`:
+  subgraph External
+    FB[Firebase Auth\noptional login source]
+  end
 
-    - `MOCK_MODE=false` (default):
-    - Connects to PostgreSQL.
-    - Runs auto-migrations.
-    - Ensures default admin account exists.
-    - Starts full router with real persistence.
+  U --> FE
+  FE -->|JSON over HTTPS| BE
+  FE -->|Google sign-in| FB
+  FB -->|ID token| FE
+  FE -->|POST /api/login/firebase| BE
+  BE --> DB
+  BE --> UP
+  U -->|Public profile URL| BE
+```
 
-    - `MOCK_MODE=true`:
-    - Uses in-memory store seeded with test users/data.
-    - Generates mock bearer tokens only from mock `/api/login`.
-    - Avoids database dependency.
+## 4. Runtime Components
 
-    Entry point: `backend/cmd/api/main.go`.
+```mermaid
+flowchart TD
+  A[cmd/api/main.go] --> B[config.Load]
+  A --> C[database.Connect]
+  A --> D[database.AutoMigrate]
+  A --> E[database.EnsureDefaultAdmin]
+  A --> F[server.NewRouter]
+  F --> G[Gin middleware chain]
+  F --> H[AuthHandler]
+  F --> I[BrowseHandler]
+  F --> J[AgencyHandler]
+  F --> K[AdminHandler]
+```
 
-    ## 5. Backend Architecture
+## 5. Backend Design
 
-    ### 5.1 Core Building Blocks
+### 5.1 API Routing
 
-    - Router layer: `internal/server/router.go`
-    - Handler layer: `internal/handlers/*.go`
-    - Middleware layer: `internal/middleware/*.go`
-    - Data models: `internal/models/*.go`
-    - Persistence bootstrap: `internal/database/database.go`
-    - Auth utilities: `internal/utils/jwt.go`, `internal/utils/password.go`
-    - Configuration: `internal/config/config.go`
+Public:
+- `GET /health`
+- `GET /public/maids/:id`
 
-    ### 5.2 Middleware Pipeline
+Authentication:
+- `POST /api/register`
+- `POST /api/login`
+- `POST /api/login/firebase`
 
-    Applied globally in this order:
-    1. Panic recovery (`gin.Recovery`)
-    2. Request logging
-    3. In-memory IP rate limiting
-    4. CORS handling
-    5. Static assets route (`/uploads`)
+Protected (`JWTAuth`):
+- `GET /api/maids`
 
-    Authentication and authorization are applied on route groups:
-    - `JWTAuth`: validates bearer JWT and sets `user_id`, `role`, `email` in request context.
-    - `AgencyOnly`: ensures role is `AGENCY`, loads agency profile, computes subscription expiry status, sets `agency_id` and `agency_subscription_status`.
-    - `AdminOnly`: ensures role is `ADMIN`.
+Agency (`JWTAuth + AgencyOnly`):
+- `GET /api/agency/maids`
+- `POST /api/agency/maids`
+- `PUT /api/agency/maids/:id`
+- `DELETE /api/agency/maids/:id`
+- `GET /api/agency/contact`
+- `PATCH /api/agency/contact`
+- `POST /api/agency/subscribe`
 
-    ### 5.3 API Surface
+Admin (`JWTAuth + AdminOnly`):
+- `GET /api/admin/agencies/pending`
+- `PATCH /api/admin/agencies/:id/approve`
+- `GET /api/admin/subscriptions`
+- `PATCH /api/admin/subscriptions/:id/activate`
+- `GET /api/admin/visit-stats`
 
-    Public routes:
-    - `GET /health`
-    - `GET /public/maids/:id` (SEO/social-preview HTML page)
+### 5.2 Middleware Pipeline
 
-    Auth routes:
-    - `POST /api/register`
-    - `POST /api/login`
+```mermaid
+flowchart LR
+  R[Incoming Request]
+  M1[gin.Recovery]
+  M2[RequestLogger]
+  M3[RateLimit]
+  M4[CORS]
+  M5[Route Group Guards\nJWTAuth / AgencyOnly / AdminOnly]
+  H[Handler]
 
-    Protected routes (`JWTAuth`):
-    - `GET /api/maids` (browse with filters)
+  R --> M1 --> M2 --> M3 --> M4 --> M5 --> H
+```
 
-    Agency routes (`JWTAuth + AgencyOnly`):
-    - `GET /api/agency/maids`
-    - `POST /api/agency/maids`
-    - `PUT /api/agency/maids/:id`
-    - `DELETE /api/agency/maids/:id`
-    - `GET /api/agency/contact`
-    - `PATCH /api/agency/contact`
-    - `POST /api/agency/subscribe`
+### 5.3 Core Backend Rules
 
-    Admin routes (`JWTAuth + AdminOnly`):
-    - `PATCH /api/admin/agencies/:id/approve`
-    - `GET /api/admin/subscriptions`
-    - `PATCH /api/admin/subscriptions/:id/activate`
+- Agency users must be approved (`users.verified = true`) before successful login.
+- Employer users are auto-verified on registration.
+- Maid age is validated to be at least 18.
+- Browse endpoint returns only `AVAILABLE` maids.
+- Agency subscription status can be marked `EXPIRED` when end date passes.
+- Backend always runs on real database (no mock runtime mode).
 
-    ## 6. Data Model
+## 6. Authentication Design
 
-    ```mermaid
-    erDiagram
-    USER ||--o| AGENCY_PROFILE : has
-    AGENCY_PROFILE ||--o{ MAID_PROFILE : owns
-    AGENCY_PROFILE ||--o{ SUBSCRIPTION : requests
+### 6.1 Email/Password Login Flow
 
-    USER {
-        uint id
-        string email
-        string password_hash
-        string role
-        bool verified
-        datetime last_login
-    }
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant API as AuthHandler
+  participant DB as PostgreSQL
 
-    AGENCY_PROFILE {
-        uint id
-        uint user_id
-        string country
-        string phone
-        string subscription_status
-        datetime subscription_start_date
-        datetime subscription_end_date
-    }
+  C->>API: POST /api/login (email, password)
+  API->>DB: Find user by email
+  API->>API: Check bcrypt password
+  API->>API: Verify agency approval (if role=AGENCY)
+  API->>API: Generate app JWT
+  API-->>C: access_token + user
+```
 
-    MAID_PROFILE {
-        uint id
-        uint agency_id
-        string name
-        int age
-        int experience_years
-        string expected_salary
-        string languages
-        string availability_status
-        string photo_url
-        string intro_video_url
-    }
+### 6.2 Firebase Login Exchange Flow
 
-    SUBSCRIPTION {
-        uint id
-        uint agency_id
-        string plan_type
-        datetime start_date
-        datetime end_date
-        string status
-        string payment_method
-        string transaction_ref
-        int requested_months
-    }
-    ```
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant FB as Firebase
+  participant API as AuthHandler
+  participant DB as PostgreSQL
 
-    Key business rules encoded in code:
-    - Agencies require admin approval before successful login (`user.verified`).
-    - Employer accounts are auto-verified at registration.
-    - Maid minimum age is 18.
-    - Browse endpoint returns only `AVAILABLE` maids.
-    - Agency subscription status can be marked expired when window has elapsed.
+  C->>FB: Sign in with Google
+  FB-->>C: Firebase ID token
+  C->>API: POST /api/login/firebase (id_token, role, profile)
+  API->>API: Verify token signature + audience + issuer
+  API->>DB: Find or create local user
+  API->>API: Generate app JWT
+  API-->>C: access_token + user
+```
 
-    ## 7. Authentication and Authorization Flow
+Token model:
+- Firebase token is used only as identity proof at login exchange time.
+- App session is always maintained by backend JWT for protected API calls.
 
-    ```mermaid
-    sequenceDiagram
-    participant C as Client
-    participant A as API
-    participant DB as PostgreSQL
+## 7. Data Model (Logical ERD)
 
-    C->>A: POST /api/login (email, password)
-    A->>DB: Lookup user by email
-    A->>A: Validate bcrypt password
-    A->>A: Check agency approval if role=AGENCY
-    A->>A: Generate JWT (HS256)
-    A-->>C: access_token + user payload
+```mermaid
+erDiagram
+  USER ||--o| AGENCY_PROFILE : owns
+  AGENCY_PROFILE ||--o{ MAID_PROFILE : publishes
+  AGENCY_PROFILE ||--o{ SUBSCRIPTION : requests
+  USER ||--o{ EMPLOYER_AGENCY_VISIT : generates
+  AGENCY_PROFILE ||--o{ EMPLOYER_AGENCY_VISIT : receives
 
-    C->>A: Protected request with Bearer token
-    A->>A: JWTAuth parse/verify token
-    A->>A: Role guard middleware
-    A-->>C: JSON response or 401/403
-    ```
+  USER {
+    uint id
+    string email
+    string password_hash
+    string role
+    bool verified
+    datetime last_login
+  }
 
-    Token details:
-    - Signed with `JWT_SECRET`.
-    - Expiry controlled by `JWT_EXPIRY_MINS`.
-    - Claims include `user_id`, `role`, `email`.
+  AGENCY_PROFILE {
+    uint id
+    uint user_id
+    string country
+    string phone
+    string subscription_status
+    datetime subscription_start_date
+    datetime subscription_end_date
+  }
 
-    ## 8. Frontend Architecture
+  MAID_PROFILE {
+    uint id
+    uint agency_id
+    string name
+    int age
+    int experience_years
+    string expected_salary
+    string languages
+    string availability_status
+    string photo_url
+    string intro_video_url
+  }
 
-    Frontend is a single React app (`frontend/src/App.jsx`) with local state-driven views.
+  SUBSCRIPTION {
+    uint id
+    uint agency_id
+    string plan_type
+    datetime start_date
+    datetime end_date
+    string status
+    string payment_method
+    string transaction_ref
+    int requested_months
+  }
 
-    Core characteristics:
-    - API base URL from `VITE_API_URL` (fallback `http://localhost:8080/api`).
-    - Stores `token` and `user` in `localStorage` for session persistence.
-    - Uses `fetch` wrappers for JSON APIs and direct `FormData` upload for maid media.
-    - Role-based UI sections:
-    - Browse (all roles)
-    - Agency tools (create/delete profiles, contact update)
-    - Admin tools (agency approval)
-    - Supports route-like behavior using browser history for profile deep links (e.g., `/maids/:id`) without a dedicated router package.
+  EMPLOYER_AGENCY_VISIT {
+    uint id
+    uint employer_id
+    uint agency_id
+    datetime created_at
+  }
+```
 
-    ## 9. Data and Request Flows
+## 8. Main Business Flows
 
-    ### 9.1 Agency Profile Creation
-    1. Agency logs in and receives JWT.
-    2. Agency submits multipart form with profile + optional media files.
-    3. Backend stores media under `uploads/` and persists maid record with file URLs.
-    4. Profile becomes visible in browse when availability is `AVAILABLE`.
+### 8.1 Agency Publishes Profile
 
-    ### 9.2 Employer Browsing and Contact
-    1. Employer queries `/api/maids` with optional filters (age/experience/language).
-    2. Backend enriches results with agency WhatsApp contact metadata.
-    3. Frontend builds click-to-chat links and optional profile-share links.
+```mermaid
+sequenceDiagram
+  participant A as Agency UI
+  participant API as AgencyHandler
+  participant FS as /uploads
+  participant DB as PostgreSQL
 
-    ### 9.3 Admin Governance
-    1. Admin approves agencies through `PATCH /api/admin/agencies/:id/approve`.
-    2. Admin activates subscription requests through `PATCH /api/admin/subscriptions/:id/activate`.
-    3. Agency subscription status and dates are updated in DB transaction.
+  A->>API: POST /api/agency/maids (multipart or JSON)
+  API->>FS: Save photo/video if provided
+  API->>DB: Insert maid profile
+  API-->>A: Created maid profile
+```
 
-    ## 10. Configuration and Environment
+### 8.2 Employer Browses and Contacts Agency
 
-    Backend config (`internal/config/config.go`) loads from `.env` / `backend/.env` with defaults for local dev:
-    - `PORT`
-    - `MOCK_MODE`
-    - `DATABASE_URL`
-    - `JWT_SECRET`
-    - `JWT_EXPIRY_MINS`
-    - `ADMIN_EMAIL`
-    - `ADMIN_PASSWORD`
-    - `ALLOWED_ORIGINS`
+```mermaid
+sequenceDiagram
+  participant E as Employer UI
+  participant API as BrowseHandler
+  participant DB as PostgreSQL
 
-    Frontend config:
-    - `VITE_API_URL`
+  E->>API: GET /api/maids?filters
+  API->>DB: Query available maids + agency contact data
+  API->>DB: Insert employer_agency_visit rows
+  API-->>E: Maid list + WhatsApp details
+```
 
-    Infrastructure:
-    - Local PostgreSQL via `docker-compose.yml` (`postgres:16`, mapped to `5432`).
+### 8.3 Admin Approval and Activation
 
-    ## 11. Security and Operational Considerations
+```mermaid
+sequenceDiagram
+  participant AD as Admin UI
+  participant API as AdminHandler
+  participant DB as PostgreSQL
 
-    Current safeguards:
-    - Password hashing with bcrypt.
-    - JWT-based stateless auth.
-    - Role-based access control in middleware.
-    - Basic in-memory rate limiting by client IP.
-    - CORS allow-list with localhost equivalence handling.
+  AD->>API: PATCH /api/admin/agencies/:id/approve
+  API->>DB: users.verified = true
+  API-->>AD: Agency approved
 
-    Operational caveats:
-    - Rate limiter is in-memory, so limits are per process and reset on restart.
-    - File uploads use local filesystem; multi-instance deployments need shared/object storage.
-    - Static uploads are directly served by API process.
-    - Default admin credentials exist for bootstrap and must be overridden in non-local environments.
+  AD->>API: PATCH /api/admin/subscriptions/:id/activate
+  API->>DB: Set subscription status paid
+  API->>DB: Set agency status active + dates
+  API-->>AD: Subscription activated
+```
 
-    ## 12. Testing Strategy Snapshot
+## 9. Frontend Design
 
-    - Mock router tests in `backend/internal/server/mock_router_test.go` validate key endpoints using in-memory mode.
-    - Tests cover health, login, protected browsing, agency maid management, and admin subscriptions listing.
-    - The mock auth system accepts only tokens issued by mock `/api/login`.
+```mermaid
+flowchart TD
+  M[main.jsx] --> AF[AuthProvider]
+  M --> R[BrowserRouter]
+  M --> Q[React Query Client]
+  M --> FI[initFirebase]
 
-    ## 13. Future Evolution Options
+  R --> AP[App Routes]
+  AP --> L[LoginPage]
+  AP --> RG[RegisterPage]
+  AP --> D[DashboardPage]
 
-    Potential next architecture steps:
-    - Introduce service/repository layers for domain isolation beyond handlers.
-    - Replace in-memory rate limiter with Redis-backed distributed limiter.
-    - Move uploads to object storage (S3-compatible) with signed URLs.
-    - Add explicit API versioning (`/api/v1`) and OpenAPI documentation.
-    - Add background jobs for moderation, notifications, and media processing.
-    - Add CI pipeline with backend unit/integration tests and frontend build/lint gates.
+  D --> C1[Browse View]
+  D --> C2[Agency CRUD View]
+  D --> C3[Admin View]
+```
+
+Frontend behavior highlights:
+- API base URL is selected from `VITE_API_URL`, with production fallback to Render API.
+- Auth context stores app token/user in local storage.
+- Firebase is initialized in frontend startup and used for Google sign-in.
+- Canonical redirect is applied on Vercel preview hosts to keep auth domain consistent.
+
+## 10. Deployment Topology
+
+```mermaid
+flowchart LR
+  subgraph Users
+    B[Browser]
+  end
+
+  subgraph Frontend Hosting
+    V[Vercel/Netlify Static Site]
+  end
+
+  subgraph Backend Hosting
+    R[Render Web Service\nGo API]
+  end
+
+  subgraph Data Services
+    S[(Supabase PostgreSQL)]
+  end
+
+  subgraph Identity
+    F[Firebase Auth]
+  end
+
+  B --> V
+  V -->|HTTPS /api/*| R
+  V -->|Google auth popup| F
+  R --> S
+```
+
+## 11. Configuration Map
+
+Backend (`backend/.env`):
+- `PORT`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `JWT_EXPIRY_MINS`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `ALLOWED_ORIGINS`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY`
+
+Frontend (`frontend/.env`):
+- `VITE_API_URL`
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+- `VITE_FIREBASE_MEASUREMENT_ID`
+
+## 12. Operational Notes
+
+- Uploads are stored on local filesystem (`/uploads`) on the backend instance.
+- For stronger production durability, move media to object storage (for example Supabase Storage).
+- Rate limiting is in-memory and per-instance.
+- CORS is allow-list based; frontend domains must match backend `ALLOWED_ORIGINS`.
+
+## 13. Quick Mental Model
+
+If you remember only one thing, remember this path:
+1. User signs in (email/password or Firebase exchange).
+2. Backend issues app JWT.
+3. Frontend uses app JWT for all protected API calls.
+4. Backend enforces role rules (`ADMIN`, `AGENCY`, `EMPLOYER`) and persists data to Supabase Postgres.

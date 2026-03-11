@@ -25,6 +25,47 @@ const EXPERIENCE_OPTIONS = [
   { value: 10, label: '10+ years' },
 ]
 
+function readStoredList(key) {
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function writeStoredList(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Ignore localStorage write failures in private or restricted contexts.
+  }
+}
+
+function getMaidCompleteness(maid) {
+  const checks = [
+    Boolean(String(maid.name || '').trim()),
+    Number(maid.age) >= 18,
+    Boolean(String(maid.languages || '').trim()),
+    Boolean(String(maid.expected_salary || '').trim()),
+    Boolean(String(maid.photo_url || '').trim()),
+    Boolean(String(maid.intro_video_url || '').trim()),
+    String(maid.availability_status || '').toUpperCase() === 'AVAILABLE',
+  ]
+  const score = Math.round((checks.filter(Boolean).length / checks.length) * 100)
+  return Math.max(0, Math.min(100, score))
+}
+
+function getMaidMissingFields(maid) {
+  const missing = []
+  if (!String(maid.expected_salary || '').trim()) missing.push('salary')
+  if (!String(maid.languages || '').trim()) missing.push('languages')
+  if (!String(maid.photo_url || '').trim()) missing.push('photo')
+  if (!String(maid.intro_video_url || '').trim()) missing.push('intro video')
+  if (String(maid.availability_status || '').toUpperCase() !== 'AVAILABLE') missing.push('availability not open')
+  return missing
+}
+
 function WhatsAppIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -87,15 +128,30 @@ export default function DashboardPage() {
   const [adminAgencyId, setAdminAgencyId] = useState('')
   const [adminSubscriptionId, setAdminSubscriptionId] = useState('')
   const [agencyWhatsappPhoneDraft, setAgencyWhatsappPhoneDraft] = useState('')
+  const [savedProfiles, setSavedProfiles] = useState([])
+  const [recentViews, setRecentViews] = useState([])
+  const [contactedAgencies, setContactedAgencies] = useState([])
   const [isApprovingAgency, setIsApprovingAgency] = useState(false)
   const [isActivatingSubscription, setIsActivatingSubscription] = useState(false)
+  const [agencyModerationInFlightId, setAgencyModerationInFlightId] = useState(null)
+  const [pendingModerationAction, setPendingModerationAction] = useState(null)
   const [isSavingContact, setIsSavingContact] = useState(false)
 
   const isAgency = user?.role === 'AGENCY'
   const isAdmin = user?.role === 'ADMIN'
   const isEmployer = user?.role === 'EMPLOYER'
+  const employerSavedKey = `employer_saved_profiles_${user?.id || 'anon'}`
+  const employerRecentKey = `employer_recent_views_${user?.id || 'anon'}`
+  const employerContactedKey = `employer_contacted_agencies_${user?.id || 'anon'}`
   const showBrowseView = activeView === 'browse' || isAgency
   const showAgencyView = isAgency
+
+  useEffect(() => {
+    if (!isEmployer) return
+    setSavedProfiles(readStoredList(employerSavedKey))
+    setRecentViews(readStoredList(employerRecentKey))
+    setContactedAgencies(readStoredList(employerContactedKey))
+  }, [isEmployer, employerSavedKey, employerRecentKey, employerContactedKey])
 
   const routedMaidId = useMemo(() => {
     if (params.maidId && /^\d+$/.test(params.maidId)) {
@@ -181,6 +237,168 @@ export default function DashboardPage() {
     if (routedMaidId === null) return maids
     return maids.filter((maid) => maid.ID === routedMaidId)
   }, [browseQuery.data, routedMaidId])
+
+  const agencyMaids = useMemo(() => myMaidsQuery.data || [], [myMaidsQuery.data])
+  const agencyAvgHealth = useMemo(() => {
+    if (!agencyMaids.length) return 0
+    const total = agencyMaids.reduce((acc, maid) => acc + getMaidCompleteness(maid), 0)
+    return Math.round(total / agencyMaids.length)
+  }, [agencyMaids])
+  const agencyProfilesWithMedia = useMemo(() => agencyMaids.filter((maid) => maid.photo_url).length, [agencyMaids])
+  const agencyTopProfiles = useMemo(
+    () => [...agencyMaids]
+      .map((maid) => ({ ...maid, health: getMaidCompleteness(maid), missing: getMaidMissingFields(maid) }))
+      .sort((a, b) => b.health - a.health)
+      .slice(0, 4),
+    [agencyMaids],
+  )
+  const agencyMissingCoverage = useMemo(
+    () => agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
+    [agencyMaids],
+  )
+
+  const adminSlaHours = useMemo(() => {
+    if (!pendingAgenciesQuery.data?.length) return 0
+    const now = Date.now()
+    const totalHours = pendingAgenciesQuery.data.reduce((acc, agency) => {
+      const createdAt = new Date(agency.created_at || 0).getTime()
+      if (!createdAt) return acc
+      return acc + (now - createdAt) / (1000 * 60 * 60)
+    }, 0)
+    return Math.round(totalHours / pendingAgenciesQuery.data.length)
+  }, [pendingAgenciesQuery.data])
+
+  const adminSlaBreaches = useMemo(() => {
+    if (!pendingAgenciesQuery.data?.length) return 0
+    const now = Date.now()
+    return pendingAgenciesQuery.data.filter((agency) => {
+      const createdAt = new Date(agency.created_at || 0).getTime()
+      if (!createdAt) return false
+      return (now - createdAt) / (1000 * 60 * 60) > 48
+    }).length
+  }, [pendingAgenciesQuery.data])
+
+  const subscriptionHealth = useMemo(() => {
+    const list = subscriptionsQuery.data || []
+    if (!list.length) return { paidRate: 0, failureRate: 0 }
+    const paid = list.filter((sub) => String(sub.status || '').toUpperCase() === 'PAID').length
+    const failed = list.filter((sub) => String(sub.status || '').toUpperCase() === 'FAILED').length
+    return {
+      paidRate: Math.round((paid / list.length) * 100),
+      failureRate: Math.round((failed / list.length) * 100),
+    }
+  }, [subscriptionsQuery.data])
+
+  const activityTrend = useMemo(() => {
+    const total = Number(visitStatsQuery.data?.total_employer_visits || 0)
+    const recent = Number(visitStatsQuery.data?.last_24h_visits || 0)
+    if (!total) return 0
+    return Math.round((recent / total) * 100)
+  }, [visitStatsQuery.data])
+
+  const trustStats = useMemo(() => {
+    const maids = browseQuery.data || []
+    const verifiedAgencyIds = new Set(
+      maids
+        .filter((maid) => maid.agency_verified)
+        .map((maid) => String(maid.agency_id || maid.AgencyID || maid.agency_phone || maid.ID)),
+    )
+    const activeCandidates = maids.filter((maid) => String(maid.availability_status || '').toUpperCase() === 'AVAILABLE').length
+    return {
+      verifiedAgencies: verifiedAgencyIds.size,
+      activeCandidates,
+    }
+  }, [browseQuery.data])
+
+  const roleHero = useMemo(() => {
+    if (isEmployer) {
+      return {
+        title: 'Hire confidently from verified domestic worker profiles.',
+        subtitle: 'Compare candidates quickly, save your shortlist, and contact trusted agencies in minutes.',
+        ctaLabel: 'Browse Profiles',
+        ctaAction: () => {
+          setActiveView('browse')
+          navigate('/dashboard')
+          setTimeout(() => {
+            document.getElementById('browse-profiles-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }, 60)
+        },
+      }
+    }
+
+    if (isAgency) {
+      return {
+        title: 'List stronger candidates and close placements faster.',
+        subtitle: 'Publish complete profiles, keep availability fresh, and improve profile performance from one dashboard.',
+        ctaLabel: 'List a Candidate',
+        ctaAction: () => {
+          document.getElementById('agency-create-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        },
+      }
+    }
+
+    return {
+      title: 'Run marketplace operations with speed and confidence.',
+      subtitle: 'Approve agencies fast, monitor subscription health, and keep platform quality high every day.',
+      ctaLabel: 'Review Approval Queue',
+      ctaAction: () => {
+        setActiveView('admin')
+        setTimeout(() => {
+          document.getElementById('admin-approval-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 60)
+      },
+    }
+  }, [isAgency, isEmployer, navigate])
+
+  function persistSavedProfiles(next) {
+    setSavedProfiles(next)
+    writeStoredList(employerSavedKey, next)
+  }
+
+  function persistRecentViews(next) {
+    setRecentViews(next)
+    writeStoredList(employerRecentKey, next)
+  }
+
+  function persistContactedAgencies(next) {
+    setContactedAgencies(next)
+    writeStoredList(employerContactedKey, next)
+  }
+
+  function toggleSavedProfile(maid) {
+    if (!isEmployer) return
+    const exists = savedProfiles.some((entry) => entry.id === maid.ID)
+    const next = exists
+      ? savedProfiles.filter((entry) => entry.id !== maid.ID)
+      : [{ id: maid.ID, name: maid.name, availability: maid.availability_status, saved_at: new Date().toISOString() }, ...savedProfiles].slice(0, 30)
+    persistSavedProfiles(next)
+    setMessage(exists ? 'Profile removed from saved list.' : 'Profile saved to your dashboard.')
+  }
+
+  function recordRecentView(maid) {
+    if (!isEmployer) return
+    const next = [
+      { id: maid.ID, name: maid.name, viewed_at: new Date().toISOString(), availability: maid.availability_status },
+      ...recentViews.filter((entry) => entry.id !== maid.ID),
+    ].slice(0, 20)
+    persistRecentViews(next)
+  }
+
+  function recordContactedAgency(maid) {
+    if (!isEmployer) return
+    const agencyRef = String(maid.agency_id || maid.AgencyID || maid.agency_phone || maid.agency_whatsapp || maid.ID)
+    const next = [
+      {
+        agency_ref: agencyRef,
+        maid_id: maid.ID,
+        maid_name: maid.name,
+        phone: maid.agency_phone || maid.agency_whatsapp || '',
+        contacted_at: new Date().toISOString(),
+      },
+      ...contactedAgencies.filter((entry) => entry.agency_ref !== agencyRef),
+    ].slice(0, 20)
+    persistContactedAgencies(next)
+  }
 
   async function createMaid(event) {
     event.preventDefault()
@@ -337,6 +555,46 @@ export default function DashboardPage() {
     }
   }
 
+  async function moderateAgency(agencyId, action) {
+    if (!agencyId || !action) return
+    setMessage('')
+    setError('')
+    setAgencyModerationInFlightId(Number(agencyId))
+    try {
+      await apiRequest(`/admin/agencies/${agencyId}/${action}`, { method: 'PATCH', token })
+      setMessage(`Agency ${action} action applied.`)
+      queryClient.invalidateQueries({ queryKey: ['admin-activated-agencies', token] })
+      queryClient.invalidateQueries({ queryKey: ['admin-pending-agencies', token] })
+    } catch (err) {
+      if (err.message === 'Session expired. Please login again.') {
+        logout()
+        navigate('/login')
+        return
+      }
+      setError(err.message)
+    } finally {
+      setAgencyModerationInFlightId(null)
+    }
+  }
+
+  function requestModerationAction(agency, action) {
+    setPendingModerationAction({
+      agencyId: agency.agency_id,
+      agencyEmail: agency.email || `Agency #${agency.agency_id}`,
+      action,
+    })
+  }
+
+  function closeModerationModal() {
+    setPendingModerationAction(null)
+  }
+
+  async function confirmModerationAction() {
+    if (!pendingModerationAction) return
+    await moderateAgency(pendingModerationAction.agencyId, pendingModerationAction.action)
+    setPendingModerationAction(null)
+  }
+
   const adminSubscriptions = subscriptionsQuery.data || []
   const pendingAgencies = pendingAgenciesQuery.data || []
   const activatedAgencies = activatedAgenciesQuery.data || []
@@ -407,8 +665,9 @@ export default function DashboardPage() {
     navigate('/dashboard')
   }
 
-  function onOpenMaidDetails(maidId) {
-    navigate(`/maids/${maidId}`)
+  function onOpenMaidDetails(maid) {
+    recordRecentView(maid)
+    navigate(`/dashboard/maids/${maid.ID}`)
   }
 
   function onLogout() {
@@ -423,10 +682,18 @@ export default function DashboardPage() {
           <img className="brand-logo" src={brandLogo} alt="SimFlow logo" />
           <div>
             <p className="brand-kicker">SimFlow</p>
-            <h1>Domestic Worker Showcase</h1>
+            <h1>{roleHero.title}</h1>
           </div>
         </div>
-        <p>Simple, visual profiles for faster employer review and better agency presentation.</p>
+        <p className="hero-subtitle">{roleHero.subtitle}</p>
+        <div className="hero-actions-row">
+          <button className="btn hero-primary-cta" type="button" onClick={roleHero.ctaAction}>{roleHero.ctaLabel}</button>
+          <div className="hero-trust-chips" aria-label="Trust indicators">
+            <span className="trust-chip">Verified agencies: {trustStats.verifiedAgencies}</span>
+            <span className="trust-chip">Target response: &lt;2h</span>
+            <span className="trust-chip">Active candidates: {trustStats.activeCandidates}</span>
+          </div>
+        </div>
         {user && (
           <div className="user-row">
             <span>{user.email} ({user.role})</span>
@@ -448,8 +715,54 @@ export default function DashboardPage() {
       {message && <p className="banner ok" role="status" aria-live="polite">{message}</p>}
       {displayError && <p className="banner err" role="alert" aria-live="assertive">{displayError}</p>}
 
+      {isEmployer && showBrowseView && (
+        <section className="grid three role-grid">
+          <article className="card elevated role-panel">
+            <h3>Saved Profiles</h3>
+            <p className="muted">Shortlist profiles to revisit quickly.</p>
+            {savedProfiles.length === 0 && <p className="muted">No saved profiles yet.</p>}
+            <ul className="list-clean role-list">
+              {savedProfiles.slice(0, 5).map((entry) => (
+                <li key={`saved-${entry.id}`}>
+                  <span>{entry.name} • {entry.availability || '-'}</span>
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => navigate(`/dashboard/maids/${entry.id}`)}>Open</button>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="card elevated role-panel">
+            <h3>Recent Views</h3>
+            <p className="muted">Profiles viewed in your latest sessions.</p>
+            {recentViews.length === 0 && <p className="muted">No recent views yet.</p>}
+            <ul className="list-clean role-list">
+              {recentViews.slice(0, 5).map((entry) => (
+                <li key={`recent-${entry.id}`}>
+                  <span>{entry.name} • {formatRelativeDate(entry.viewed_at)}</span>
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => navigate(`/dashboard/maids/${entry.id}`)}>Open</button>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="card elevated role-panel">
+            <h3>Contacted Agencies</h3>
+            <p className="muted">Track who you already contacted.</p>
+            {contactedAgencies.length === 0 && <p className="muted">No agencies contacted yet.</p>}
+            <ul className="list-clean role-list">
+              {contactedAgencies.slice(0, 5).map((entry) => (
+                <li key={`contact-${entry.agency_ref}`}>
+                  <span>{entry.maid_name} • {entry.phone || 'No phone'}</span>
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => navigate(`/dashboard/maids/${entry.maid_id}`)}>View</button>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </section>
+      )}
+
       {showBrowseView && (
-        <section className="card browse-card">
+        <section className="card browse-card" id="browse-profiles-section">
           <div className="section-head">
             <h2>{routedMaidId !== null ? 'Profile Details' : 'Browse Profiles'}</h2>
             <div>
@@ -489,11 +802,11 @@ export default function DashboardPage() {
                 className={`maid-card ${routedMaidId === maid.ID ? 'maid-card-active' : ''}`}
                 key={maid.ID}
                 id={`maid-${maid.ID}`}
-                onClick={() => onOpenMaidDetails(maid.ID)}
+                onClick={() => onOpenMaidDetails(maid)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    onOpenMaidDetails(maid.ID)
+                    onOpenMaidDetails(maid)
                   }
                 }}
                 role="button"
@@ -523,6 +836,18 @@ export default function DashboardPage() {
                       : maid.agency_whatsapp_url || ''
                     return (
                       <div className="icon-actions">
+                        {isEmployer && (
+                          <button
+                            className="btn secondary save-profile-btn"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              toggleSavedProfile(maid)
+                            }}
+                          >
+                            {savedProfiles.some((entry) => entry.id === maid.ID) ? 'Saved' : 'Save'}
+                          </button>
+                        )}
                         {contactUrl && (
                           <a
                             className="icon-btn"
@@ -531,7 +856,10 @@ export default function DashboardPage() {
                             rel="noreferrer"
                             aria-label={`Contact agency on WhatsApp for ${maid.name}`}
                             title="Contact on WhatsApp"
-                            onClick={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              recordContactedAgency(maid)
+                            }}
                           >
                             <WhatsAppIcon />
                           </a>
@@ -592,8 +920,43 @@ export default function DashboardPage() {
       )}
 
       {showAgencyView && (
-        <section className="grid two">
-          <form onSubmit={createMaid} className="card elevated">
+        <>
+          <section className="grid three role-grid">
+            <article className="card elevated role-panel">
+              <h3>Listing Health Score</h3>
+              <h2 className="role-score">{agencyAvgHealth}%</h2>
+              <p className="muted">Average completeness across your profiles.</p>
+            </article>
+            <article className="card elevated role-panel">
+              <h3>Missing Fields</h3>
+              <h2 className="role-score">{agencyMissingCoverage}</h2>
+              <p className="muted">Profiles still missing salary, media, language, or open availability.</p>
+            </article>
+            <article className="card elevated role-panel">
+              <h3>Profile Performance</h3>
+              <h2 className="role-score">{agencyProfilesWithMedia}/{agencyMaids.length}</h2>
+              <p className="muted">Profiles with photo uploaded (stronger conversion signal).</p>
+            </article>
+          </section>
+
+          {agencyTopProfiles.length > 0 && (
+            <section className="card elevated role-panel">
+              <div className="section-head">
+                <h3>Top Performing Profiles</h3>
+              </div>
+              <ul className="list-clean role-list">
+                {agencyTopProfiles.map((maid) => (
+                  <li key={`top-${maid.ID}`}>
+                    <span>{maid.name} • Health {maid.health}% {maid.missing.length ? `• Missing: ${maid.missing.join(', ')}` : '• Complete'}</span>
+                    <button className="btn secondary table-action-btn" type="button" onClick={() => startEditMaid(maid)}>Improve</button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section className="grid two">
+            <form onSubmit={createMaid} className="card elevated" id="agency-create-section">
             <h2>Create Maid Profile</h2>
             <p className="muted">Upload real photo and optional intro video file (not URL).</p>
             <label htmlFor="maid-name">Name</label>
@@ -624,9 +987,9 @@ export default function DashboardPage() {
               <input type="file" accept="video/*" onChange={(e) => setVideoFile(e.target.files?.[0] || null)} />
             </label>
             <button className="btn" type="submit">Create Profile</button>
-          </form>
+            </form>
 
-          <div className="card full">
+            <div className="card full">
             <div className="section-head">
               <h2>My Profiles</h2>
               <button className="btn secondary" onClick={() => myMaidsQuery.refetch()}>Refresh</button>
@@ -696,8 +1059,9 @@ export default function DashboardPage() {
             {agencyContactQuery.data?.whatsapp_url && (
               <a className="btn secondary" href={agencyContactQuery.data.whatsapp_url} target="_blank" rel="noreferrer">Open My WhatsApp Link</a>
             )}
-          </div>
-        </section>
+            </div>
+          </section>
+        </>
       )}
 
       {isAdmin && activeView === 'admin' && (
@@ -769,6 +1133,26 @@ export default function DashboardPage() {
             </article>
           </div>
 
+          <section className="grid three role-grid">
+            <article className="card elevated role-panel">
+              <h3>Approval Queue SLA</h3>
+              <h2 className="role-score">{adminSlaHours}h</h2>
+              <p className="muted">Average waiting time for pending agency approvals.</p>
+              <p className="muted">Breaches over 48h: <strong>{adminSlaBreaches}</strong></p>
+            </article>
+            <article className="card elevated role-panel">
+              <h3>Subscription Health</h3>
+              <h2 className="role-score">{subscriptionHealth.paidRate}%</h2>
+              <p className="muted">Paid conversion rate across subscription requests.</p>
+              <p className="muted">Failure rate: <strong>{subscriptionHealth.failureRate}%</strong></p>
+            </article>
+            <article className="card elevated role-panel">
+              <h3>Activity Trend</h3>
+              <h2 className="role-score">{activityTrend}%</h2>
+              <p className="muted">Share of total visits generated in the last 24 hours.</p>
+            </article>
+          </section>
+
           <div className="grid two admin-tools-grid">
             <form onSubmit={approveAgency} className="card elevated admin-panel">
               <h3>Approve Agency</h3>
@@ -791,7 +1175,7 @@ export default function DashboardPage() {
             </form>
           </div>
 
-          <article className="card elevated admin-table-panel">
+          <article className="card elevated admin-table-panel" id="admin-approval-queue">
             <div className="section-head">
               <h3>Activated Agencies Using Platform</h3>
               <button className="btn secondary" onClick={() => activatedAgenciesQuery.refetch()}>Refresh Table</button>
@@ -809,9 +1193,11 @@ export default function DashboardPage() {
                     <tr>
                       <th>Agency ID</th>
                       <th>Email</th>
+                      <th>Moderation</th>
                       <th>Status</th>
                       <th>Maid Profiles</th>
                       <th>Last Login</th>
+                      <th>Controls</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -820,12 +1206,66 @@ export default function DashboardPage() {
                         <td>#{agency.agency_id}</td>
                         <td>{agency.email || '-'}</td>
                         <td>
+                          {agency.banned ? (
+                            <span className="status-tag status-banned">BANNED</span>
+                          ) : agency.blocked ? (
+                            <span className="status-tag status-blocked">BLOCKED</span>
+                          ) : (
+                            <span className="status-tag status-active">CLEAR</span>
+                          )}
+                        </td>
+                        <td>
                           <span className={`status-tag status-${String(agency.subscription_status || '').toLowerCase()}`}>
                             {agency.subscription_status || '-'}
                           </span>
                         </td>
                         <td>{agency.maid_count ?? 0}</td>
                         <td>{agency.last_login ? formatRelativeDate(agency.last_login) : '-'}</td>
+                        <td>
+                          <div className="crud-actions">
+                            {!agency.banned ? (
+                              <button
+                                className="btn danger table-action-btn"
+                                type="button"
+                                disabled={agencyModerationInFlightId === agency.agency_id}
+                                onClick={() => requestModerationAction(agency, 'ban')}
+                              >
+                                Ban
+                              </button>
+                            ) : (
+                              <button
+                                className="btn secondary table-action-btn"
+                                type="button"
+                                disabled={agencyModerationInFlightId === agency.agency_id}
+                                onClick={() => requestModerationAction(agency, 'unban')}
+                              >
+                                Unban
+                              </button>
+                            )}
+
+                            {!agency.banned && (
+                              agency.blocked ? (
+                                <button
+                                  className="btn secondary table-action-btn"
+                                  type="button"
+                                  disabled={agencyModerationInFlightId === agency.agency_id}
+                                  onClick={() => requestModerationAction(agency, 'unblock')}
+                                >
+                                  Unblock
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn secondary table-action-btn"
+                                  type="button"
+                                  disabled={agencyModerationInFlightId === agency.agency_id}
+                                  onClick={() => requestModerationAction(agency, 'block')}
+                                >
+                                  Block
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -983,6 +1423,22 @@ export default function DashboardPage() {
         <section className="card">
           <p className="muted">Employers can browse and contact verified agencies from the Browse tab.</p>
         </section>
+      )}
+
+      {pendingModerationAction && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm agency moderation action">
+          <div className="modal-card">
+            <h3>Confirm {pendingModerationAction.action}</h3>
+            <p>
+              You are about to <strong>{pendingModerationAction.action}</strong> <strong>{pendingModerationAction.agencyEmail}</strong>.
+              This action immediately changes the agency login access state.
+            </p>
+            <div className="modal-actions">
+              <button className="btn secondary" type="button" onClick={closeModerationModal}>Cancel</button>
+              <button className="btn danger" type="button" onClick={confirmModerationAction}>Confirm</button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )
