@@ -42,6 +42,20 @@ type publicMaidPageData struct {
 	Availability      string
 }
 
+type PublicMaidProfileResponse struct {
+	ID                uint   `json:"id"`
+	Name              string `json:"name"`
+	Age               int    `json:"age"`
+	ExperienceYears   int    `json:"experience_years"`
+	Languages         string `json:"languages"`
+	ExpectedSalary    string `json:"expected_salary"`
+	Availability      string `json:"availability_status"`
+	PhotoURL          string `json:"photo_url"`
+	AgencyWhatsAppURL string `json:"agency_whatsapp_url"`
+	AgencyVerified    bool   `json:"agency_verified"`
+	LastUpdatedAt     string `json:"last_updated_at"`
+}
+
 func NewBrowseHandler(db *gorm.DB) *BrowseHandler {
 	return &BrowseHandler{db: db}
 }
@@ -195,6 +209,44 @@ func (h *BrowseHandler) PublicMaidProfile(c *gin.Context) {
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, html.String())
+}
+
+func (h *BrowseHandler) PublicMaidProfileJSON(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid maid id"})
+		return
+	}
+
+	var maid models.MaidProfile
+	if err := h.db.First(&maid, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
+		return
+	}
+
+	var agency struct {
+		Phone    string
+		Verified bool
+	}
+	_ = h.db.Table("agency_profiles").
+		Select("agency_profiles.phone, users.verified").
+		Joins("left join users on users.id = agency_profiles.user_id").
+		Where("agency_profiles.id = ?", maid.AgencyID).
+		Take(&agency).Error
+
+	c.JSON(http.StatusOK, PublicMaidProfileResponse{
+		ID:                maid.ID,
+		Name:              maid.Name,
+		Age:               maid.Age,
+		ExperienceYears:   maid.ExperienceYears,
+		Languages:         maid.Languages,
+		ExpectedSalary:    maid.ExpectedSalary,
+		Availability:      maid.AvailabilityStatus,
+		PhotoURL:          maskURL(maid.PhotoURL),
+		AgencyWhatsAppURL: buildWhatsAppURL(agency.Phone, fmt.Sprintf("Hello, I am interested in %s profile.", maid.Name)),
+		AgencyVerified:    agency.Verified,
+		LastUpdatedAt:     maid.UpdatedAt.Format(time.RFC3339),
+	})
 }
 
 func maskURL(value string) string {

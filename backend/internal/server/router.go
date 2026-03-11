@@ -37,6 +37,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/login/firebase", authHandler.FirebaseLogin)
+		auth.GET("/public/maids/:id", browseHandler.PublicMaidProfileJSON)
 	}
 
 	protected := r.Group("/api")

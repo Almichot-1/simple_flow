@@ -1,14 +1,82 @@
 import { Navigate, useParams } from 'react-router-dom'
-import { apiOrigin } from '../../../shared/api/client'
+import { useQuery } from '@tanstack/react-query'
+import { apiRequest } from '../../../shared/api/client'
+import { formatRelativeDate, mediaUrl } from '../../../shared/lib/helpers'
+
+function PublicProfileCard({ maid }) {
+  return (
+    <main className="public-profile-page" aria-label="Public maid profile">
+      <div className="public-profile-shell">
+        <span className="public-badge">Verified showcase profile</span>
+        <article className="public-card">
+          <div className="public-media-wrap">
+            {maid.photo_url ? (
+              <img className="public-media" src={mediaUrl(maid.photo_url)} alt={`${maid.name} profile`} />
+            ) : (
+              <div className="public-media-placeholder">Profile Photo Coming Soon</div>
+            )}
+          </div>
+          <div className="public-content">
+            <h1>{maid.name}</h1>
+            <p className="public-subtitle">Trusted domestic worker profile curated for fast employer review.</p>
+            <ul className="public-meta-grid">
+              <li><span>Age</span><strong>{maid.age} years</strong></li>
+              <li><span>Experience</span><strong>{maid.experience_years} years</strong></li>
+              <li><span>Languages</span><strong>{maid.languages || 'N/A'}</strong></li>
+              <li><span>Expected Salary</span><strong>{maid.expected_salary || 'Negotiable'}</strong></li>
+            </ul>
+            <div className="public-bottom-row">
+              <span className="public-status">{maid.availability_status}</span>
+              <span className="public-updated">{formatRelativeDate(maid.last_updated_at)}</span>
+            </div>
+            {maid.agency_whatsapp_url && (
+              <a className="public-cta" href={maid.agency_whatsapp_url} target="_blank" rel="noreferrer noopener">
+                Contact Agency on WhatsApp
+              </a>
+            )}
+          </div>
+        </article>
+      </div>
+    </main>
+  )
+}
 
 export default function PublicMaidRedirectPage() {
   const { maidId } = useParams()
+
+  const maidQuery = useQuery({
+    queryKey: ['public-maid-profile', maidId],
+    queryFn: () => apiRequest(`/public/maids/${maidId}`),
+    enabled: Boolean(maidId && /^\d+$/.test(maidId)),
+    retry: false,
+  })
 
   if (!maidId || !/^\d+$/.test(maidId)) {
     return <Navigate to="/login" replace />
   }
 
-  // Redirect legacy shared frontend links to the backend public profile endpoint.
-  window.location.replace(`${apiOrigin}/public/maids/${maidId}`)
-  return null
+  if (maidQuery.isLoading) {
+    return (
+      <main className="public-profile-page">
+        <div className="public-profile-shell">
+          <p className="muted">Loading profile...</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (maidQuery.isError || !maidQuery.data) {
+    return (
+      <main className="public-profile-page">
+        <div className="public-profile-shell">
+          <article className="card elevated">
+            <h2>Profile unavailable</h2>
+            <p className="muted">This shared profile may have been removed or the link is invalid.</p>
+          </article>
+        </div>
+      </main>
+    )
+  }
+
+  return <PublicProfileCard maid={maidQuery.data} />
 }

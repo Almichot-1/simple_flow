@@ -23,7 +23,7 @@ export function buildWhatsAppShareUrl(message) {
 }
 
 export function getMaidProfileLink(maidId) {
-  return `${apiOrigin}/public/maids/${maidId}`
+  return `${window.location.origin}/maids/${maidId}`
 }
 
 export function formatRelativeDate(value) {

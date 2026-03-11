@@ -217,6 +217,20 @@ export default function DashboardPage() {
 
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
 
+  const isDashboardBusy =
+    browseQuery.isFetching ||
+    myMaidsQuery.isFetching ||
+    agencyContactQuery.isFetching ||
+    subscriptionsQuery.isFetching ||
+    pendingAgenciesQuery.isFetching ||
+    activatedAgenciesQuery.isFetching ||
+    visitStatsQuery.isFetching ||
+    isApprovingAgency ||
+    isActivatingSubscription ||
+    Boolean(agencyModerationInFlightId) ||
+    isDeletingAccount ||
+    isSavingContact
+
   const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || activatedAgenciesQuery.error || visitStatsQuery.error
   const displayError = error || (queryError && queryError.message !== 'Session expired. Please login again.' ? queryError.message : '')
 
@@ -226,6 +240,12 @@ export default function DashboardPage() {
       navigate('/login')
     }
   }, [queryError, logout, navigate])
+
+  useEffect(() => {
+    if (!message) return
+    const timeoutId = window.setTimeout(() => setMessage(''), 3200)
+    return () => window.clearTimeout(timeoutId)
+  }, [message])
 
   useEffect(() => {
     const maids = browseQuery.data || []
@@ -665,6 +685,7 @@ export default function DashboardPage() {
   }
 
   function onApplyFilters() {
+    setMessage('Filters applied. Updating results...')
     setAppliedFilters(filters)
   }
 
@@ -674,7 +695,26 @@ export default function DashboardPage() {
 
   function onOpenMaidDetails(maid) {
     recordRecentView(maid)
+    setMessage(`Opening ${maid.name} profile...`)
     navigate(`/dashboard/maids/${maid.ID}`)
+  }
+
+  function onRefreshBrowse() {
+    setMessage('Refreshing profiles...')
+    browseQuery.refetch()
+  }
+
+  function onRefreshMyProfiles() {
+    setMessage('Refreshing your profiles...')
+    myMaidsQuery.refetch()
+  }
+
+  function onRefreshAdminData() {
+    setMessage('Refreshing admin analytics...')
+    subscriptionsQuery.refetch()
+    pendingAgenciesQuery.refetch()
+    activatedAgenciesQuery.refetch()
+    visitStatsQuery.refetch()
   }
 
   function onLogout() {
@@ -707,7 +747,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="app">
+    <main className="app" aria-busy={isDashboardBusy}>
       <header className="hero">
         <div className="brand-row">
           <img className="brand-logo" src={brandLogo} alt="SimFlow logo" />
@@ -724,6 +764,10 @@ export default function DashboardPage() {
             <span className="trust-chip">Target response: &lt;2h</span>
             <span className="trust-chip">Active candidates: {trustStats.activeCandidates}</span>
           </div>
+        </div>
+        <div className="live-status" role="status" aria-live="polite">
+          <span className={`live-dot ${isDashboardBusy ? 'is-busy' : ''}`} aria-hidden="true" />
+          <span>{isDashboardBusy ? 'Updating dashboard data...' : 'Dashboard is ready.'}</span>
         </div>
         {user && (
           <div className="user-row">
@@ -806,7 +850,7 @@ export default function DashboardPage() {
               {routedMaidId !== null && (
                 <button className="btn secondary" onClick={onOpenAllProfiles}>Back to All Profiles</button>
               )}
-              <button className="btn secondary" onClick={() => browseQuery.refetch()}>Refresh</button>
+              <button className="btn secondary" onClick={onRefreshBrowse}>Refresh</button>
             </div>
           </div>
           <div className="grid four">
@@ -829,7 +873,20 @@ export default function DashboardPage() {
           <p className="muted section-note">Note: `AVAILABLE` profiles are usually shown first in browse results.</p>
           <button className="btn" onClick={onApplyFilters}>Apply Filters</button>
 
-          {browseQuery.isLoading && <p className="muted">Loading profiles...</p>}
+          {browseQuery.isLoading && (
+            <div className="maids-grid" aria-label="Loading profiles">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <article className="maid-card skeleton-card" key={`skeleton-${index}`}>
+                  <div className="media-wrap skeleton-block" />
+                  <div className="maid-content">
+                    <p className="skeleton-line" />
+                    <p className="skeleton-line short" />
+                    <p className="skeleton-line" />
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
           {displayedMaids.length === 0 && !browseQuery.isLoading && routedMaidId === null && <p className="muted">No profiles match your filters.</p>}
           {displayedMaids.length === 0 && !browseQuery.isLoading && routedMaidId !== null && <p className="muted">This profile could not be found.</p>}
 
@@ -1027,13 +1084,13 @@ export default function DashboardPage() {
             <label className="file-label">Intro Video (Optional)
               <input type="file" accept="video/*" onChange={(e) => setVideoFile(e.target.files?.[0] || null)} />
             </label>
-            <button className="btn" type="submit">Create Profile</button>
+              <button className="btn" type="submit">Create Profile</button>
             </form>
 
             <div className="card full">
             <div className="section-head">
               <h2>My Profiles</h2>
-              <button className="btn secondary" onClick={() => myMaidsQuery.refetch()}>Refresh</button>
+              <button className="btn secondary" onClick={onRefreshMyProfiles}>Refresh</button>
             </div>
             {myMaidsQuery.isLoading && <p className="muted">Loading agency profiles...</p>}
             <ul className="list-clean">
@@ -1114,15 +1171,7 @@ export default function DashboardPage() {
               <h2>Admin Command Dashboard</h2>
               <p className="muted">Approve agencies, review payment state, and activate subscriptions from one control surface.</p>
             </div>
-            <button
-              className="btn secondary"
-              onClick={() => {
-                subscriptionsQuery.refetch()
-                pendingAgenciesQuery.refetch()
-                activatedAgenciesQuery.refetch()
-                visitStatsQuery.refetch()
-              }}
-            >
+            <button className="btn secondary" onClick={onRefreshAdminData}>
               {subscriptionsQuery.isFetching || pendingAgenciesQuery.isFetching || activatedAgenciesQuery.isFetching || visitStatsQuery.isFetching ? 'Refreshing...' : 'Refresh Analytics'}
             </button>
           </article>
