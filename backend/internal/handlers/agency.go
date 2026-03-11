@@ -1,7 +1,11 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +23,8 @@ import (
 type AgencyHandler struct {
 	db *gorm.DB
 }
+
+const imgBBUploadURL = "https://api.imgbb.com/1/upload"
 
 func NewAgencyHandler(db *gorm.DB) *AgencyHandler {
 	return &AgencyHandler{db: db}
@@ -168,6 +174,12 @@ func saveUploadedFile(c *gin.Context, field, prefix string) (string, error) {
 		return "", nil
 	}
 
+	if field == "photo" {
+		if uploadedURL, uploadErr := uploadPhotoToImgBB(file); uploadErr == nil && uploadedURL != "" {
+			return uploadedURL, nil
+		}
+	}
+
 	if mkErr := os.MkdirAll("uploads", os.ModePerm); mkErr != nil {
 		return "", fmt.Errorf("failed to create upload directory")
 	}
@@ -179,6 +191,64 @@ func saveUploadedFile(c *gin.Context, field, prefix string) (string, error) {
 	}
 
 	return "/" + path, nil
+}
+
+func uploadPhotoToImgBB(file *multipart.FileHeader) (string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("IMGBB_API_KEY"))
+	if apiKey == "" {
+		return "", fmt.Errorf("imgbb api key is not configured")
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return "", fmt.Errorf("failed to open image file")
+	}
+	defer src.Close()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("image", file.Filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to create upload payload")
+	}
+	if _, err = io.Copy(part, src); err != nil {
+		return "", fmt.Errorf("failed to stream image payload")
+	}
+	if err = writer.Close(); err != nil {
+		return "", fmt.Errorf("failed to finalize upload payload")
+	}
+
+	uploadURL := fmt.Sprintf("%s?key=%s", imgBBUploadURL, url.QueryEscape(apiKey))
+	req, err := http.NewRequest(http.MethodPost, uploadURL, &body)
+	if err != nil {
+		return "", fmt.Errorf("failed to create imgbb request")
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to upload image")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("imgbb upload failed with status %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Success bool `json:"success"`
+		Data    struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("failed to decode imgbb response")
+	}
+	if !payload.Success || strings.TrimSpace(payload.Data.URL) == "" {
+		return "", fmt.Errorf("imgbb upload did not return a valid url")
+	}
+
+	return payload.Data.URL, nil
 }
 
 func (h *AgencyHandler) DeleteMaid(c *gin.Context) {
