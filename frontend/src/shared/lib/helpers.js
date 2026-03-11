@@ -17,6 +17,44 @@ export function buildWhatsAppUrlFromPhone(phone, message) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
 }
 
+function extractPhoneFromWhatsAppUrl(whatsAppUrl) {
+  const raw = String(whatsAppUrl || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    const phoneFromQuery = parsed.searchParams.get('phone')
+    if (phoneFromQuery) {
+      return normalizePhoneToDigits(phoneFromQuery)
+    }
+    const pathParts = parsed.pathname.split('/').filter(Boolean)
+    const lastPart = pathParts[pathParts.length - 1] || ''
+    return normalizePhoneToDigits(lastPart)
+  } catch {
+    return ''
+  }
+}
+
+export function buildWhatsAppDirectUrl({ phone, whatsAppUrl, message }) {
+  const directFromPhone = buildWhatsAppUrlFromPhone(phone, message)
+  if (directFromPhone) return directFromPhone
+
+  const extractedPhone = extractPhoneFromWhatsAppUrl(whatsAppUrl)
+  const directFromUrlPhone = buildWhatsAppUrlFromPhone(extractedPhone, message)
+  if (directFromUrlPhone) return directFromUrlPhone
+
+  const fallback = String(whatsAppUrl || '').trim()
+  if (!fallback) return ''
+  if (!message) return fallback
+
+  try {
+    const parsed = new URL(fallback)
+    parsed.searchParams.set('text', message)
+    return parsed.toString()
+  } catch {
+    return fallback
+  }
+}
+
 export function buildWhatsAppShareUrl(message) {
   if (!message) return 'https://wa.me/'
   return `https://wa.me/?text=${encodeURIComponent(message)}`

@@ -1,9 +1,16 @@
 import { Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../../../shared/api/client'
-import { formatRelativeDate, mediaUrl } from '../../../shared/lib/helpers'
+import { buildWhatsAppDirectUrl, formatRelativeDate, mediaUrl } from '../../../shared/lib/helpers'
 
 function PublicProfileCard({ maid }) {
+  const profileLink = `${window.location.origin}/maids/${maid.id}`
+  const whatsappMessage = `Hello, I am interested in ${maid.name} profile. Profile link: ${profileLink}`
+  const whatsappUrl = buildWhatsAppDirectUrl({
+    whatsAppUrl: maid.agency_whatsapp_url,
+    message: whatsappMessage,
+  })
+
   return (
     <main className="public-profile-page" aria-label="Public maid profile">
       <div className="public-profile-shell">
@@ -29,8 +36,8 @@ function PublicProfileCard({ maid }) {
               <span className="public-status">{maid.availability_status}</span>
               <span className="public-updated">{formatRelativeDate(maid.last_updated_at)}</span>
             </div>
-            {maid.agency_whatsapp_url && (
-              <a className="public-cta" href={maid.agency_whatsapp_url} target="_blank" rel="noreferrer noopener">
+            {whatsappUrl && (
+              <a className="public-cta" href={whatsappUrl} target="_blank" rel="noreferrer noopener">
                 Contact Agency on WhatsApp
               </a>
             )}

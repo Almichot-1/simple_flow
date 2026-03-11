@@ -992,15 +992,26 @@ export default function DashboardPage() {
         )}
       </header>
 
-      {message && <p className="banner ok" role="status" aria-live="polite">{message}</p>}
-      {displayError && <p className="banner err" role="alert" aria-live="assertive">{displayError}</p>}
+      <section className="toast-stack" aria-live="polite" aria-label="Notifications">
+        {toasts.map((toast) => (
+          <article key={toast.id} className={`toast-item ${toast.type === 'err' ? 'err' : 'ok'}`}>
+            <span>{toast.text}</span>
+            <button className="toast-close" type="button" onClick={() => setToasts((prev) => prev.filter((entry) => entry.id !== toast.id))}>Dismiss</button>
+          </article>
+        ))}
+      </section>
 
       {isEmployer && showBrowseView && (
         <section className="grid three role-grid">
           <article className="card elevated role-panel">
             <h3>Saved Profiles</h3>
             <p className="muted">Shortlist profiles to revisit quickly.</p>
-            {savedProfiles.length === 0 && <p className="muted">No saved profiles yet.</p>}
+            {savedProfiles.length === 0 && (
+              <div className="empty-state">
+                <p className="muted">No saved profiles yet.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={() => document.getElementById('browse-profiles-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Start Browsing</button>
+              </div>
+            )}
             <ul className="list-clean role-list">
               {savedProfiles.slice(0, 5).map((entry) => (
                 <li key={`saved-${entry.id}`}>
@@ -1014,7 +1025,12 @@ export default function DashboardPage() {
           <article className="card elevated role-panel">
             <h3>Recent Views</h3>
             <p className="muted">Profiles viewed in your latest sessions.</p>
-            {recentViews.length === 0 && <p className="muted">No recent views yet.</p>}
+            {recentViews.length === 0 && (
+              <div className="empty-state">
+                <p className="muted">No recent views yet.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={() => document.getElementById('browse-profiles-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>View Candidates</button>
+              </div>
+            )}
             <ul className="list-clean role-list">
               {recentViews.slice(0, 5).map((entry) => (
                 <li key={`recent-${entry.id}`}>
@@ -1028,7 +1044,12 @@ export default function DashboardPage() {
           <article className="card elevated role-panel">
             <h3>Contacted Agencies</h3>
             <p className="muted">Track who you already contacted.</p>
-            {contactedAgencies.length === 0 && <p className="muted">No agencies contacted yet.</p>}
+            {contactedAgencies.length === 0 && (
+              <div className="empty-state">
+                <p className="muted">No agencies contacted yet.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={() => document.getElementById('browse-profiles-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Contact an Agency</button>
+              </div>
+            )}
             <ul className="list-clean role-list">
               {contactedAgencies.slice(0, 5).map((entry) => (
                 <li key={`contact-${entry.agency_ref}`}>
@@ -1074,9 +1095,11 @@ export default function DashboardPage() {
               <option value="BOOKED">BOOKED</option>
             </select>
             <input placeholder="Language" value={filters.lang} onChange={(e) => setFilters({ ...filters, lang: e.target.value })} />
+            <input placeholder="Search by name, skill, language" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
           <p className="muted section-note">Note: `AVAILABLE` profiles are usually shown first in browse results.</p>
           <button className="btn" onClick={onApplyFilters}>Apply Filters</button>
+          {!browseQuery.isLoading && <p className="muted results-count">{searchedMaids.length} results found.</p>}
 
           {browseQuery.isLoading && (
             <div className="maids-grid" aria-label="Loading profiles">
@@ -1092,11 +1115,11 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-          {displayedMaids.length === 0 && !browseQuery.isLoading && routedMaidId === null && <p className="muted">No profiles match your filters.</p>}
-          {displayedMaids.length === 0 && !browseQuery.isLoading && routedMaidId !== null && <p className="muted">This profile could not be found.</p>}
+          {searchedMaids.length === 0 && !browseQuery.isLoading && routedMaidId === null && <p className="muted">No profiles match your filters.</p>}
+          {searchedMaids.length === 0 && !browseQuery.isLoading && routedMaidId !== null && <p className="muted">This profile could not be found.</p>}
 
           <div className="maids-grid">
-            {displayedMaids.map((maid) => (
+            {browsePageData.pageItems.map((maid) => (
               <article
                 className={`maid-card ${routedMaidId === maid.ID ? 'maid-card-active' : ''}`}
                 key={maid.ID}
@@ -1200,22 +1223,23 @@ export default function DashboardPage() {
               </article>
             ))}
           </div>
+          {renderPager(browsePageData.safePage, browsePageData.totalPages, setBrowsePage)}
 
-          {routedMaidId !== null && displayedMaids[0] && (
+          {routedMaidId !== null && searchedMaids[0] && (
             <section className="maid-detail-panel" aria-label="Maid actual details">
               <h3>Actual Maid Data</h3>
               <div className="maid-detail-grid">
-                <p><strong>ID:</strong> {displayedMaids[0].ID}</p>
-                <p><strong>Name:</strong> {displayedMaids[0].name}</p>
-                <p><strong>Age:</strong> {displayedMaids[0].age}</p>
-                <p><strong>Experience:</strong> {displayedMaids[0].experience_years} years</p>
-                <p><strong>Languages:</strong> {displayedMaids[0].languages || '-'}</p>
-                <p><strong>Narrative:</strong> {displayedMaids[0].narrative || '-'}</p>
-                <p><strong>Expected salary:</strong> {displayedMaids[0].expected_salary || '-'}</p>
-                <p><strong>Availability:</strong> {displayedMaids[0].availability_status}</p>
-                <p><strong>Agency verified:</strong> {displayedMaids[0].agency_verified ? 'Yes' : 'No'}</p>
-                <p><strong>Agency phone:</strong> {displayedMaids[0].agency_phone || '-'}</p>
-                <p><strong>Last updated:</strong> {displayedMaids[0].last_updated_at || displayedMaids[0].UpdatedAt || '-'}</p>
+                <p><strong>ID:</strong> {searchedMaids[0].ID}</p>
+                <p><strong>Name:</strong> {searchedMaids[0].name}</p>
+                <p><strong>Age:</strong> {searchedMaids[0].age}</p>
+                <p><strong>Experience:</strong> {searchedMaids[0].experience_years} years</p>
+                <p><strong>Languages:</strong> {searchedMaids[0].languages || '-'}</p>
+                <p><strong>Narrative:</strong> {searchedMaids[0].narrative || '-'}</p>
+                <p><strong>Expected salary:</strong> {searchedMaids[0].expected_salary || '-'}</p>
+                <p><strong>Availability:</strong> {searchedMaids[0].availability_status}</p>
+                <p><strong>Agency verified:</strong> {searchedMaids[0].agency_verified ? 'Yes' : 'No'}</p>
+                <p><strong>Agency phone:</strong> {searchedMaids[0].agency_phone || '-'}</p>
+                <p><strong>Last updated:</strong> {searchedMaids[0].last_updated_at || searchedMaids[0].UpdatedAt || '-'}</p>
               </div>
             </section>
           )}
