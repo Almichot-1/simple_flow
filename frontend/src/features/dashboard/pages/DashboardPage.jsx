@@ -1644,6 +1644,7 @@ export default function DashboardPage() {
                       onChange={(e) => setEditMaidForm({ ...editMaidForm, narrative: e.target.value })}
                       rows={4}
                     />
+                    <p className="muted section-note">Note: Write a short description about skills, personality, and strengths.</p>
                   </>
                 )}
 
