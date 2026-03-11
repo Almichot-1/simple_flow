@@ -42,6 +42,17 @@ func AgencyOnly(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func EmployerOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role := c.GetString("role")
+		if role != models.RoleEmployer {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "employer role required"})
+			return
+		}
+		c.Next()
+	}
+}
+
 func ActiveSubscriptionOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Subscription mode is temporarily disabled.

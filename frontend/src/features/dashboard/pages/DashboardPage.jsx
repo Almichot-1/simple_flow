@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
 import { useAuth } from '../../auth/context/useAuth'
 import {
-  buildWhatsAppUrlFromPhone,
+  buildWhatsAppDirectUrl,
   formatRelativeDate,
   getMaidProfileLink,
   mediaUrl,
@@ -25,6 +25,47 @@ const EXPERIENCE_OPTIONS = [
   { value: 10, label: '10+ years' },
 ]
 
+const PAGE_SIZE_BROWSE = 9
+const PAGE_SIZE_TABLE = 10
+
+function clampPage(page, totalPages) {
+  return Math.min(Math.max(page, 1), Math.max(totalPages, 1))
+}
+
+function paginateItems(items, page, pageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
+  const safePage = clampPage(page, totalPages)
+  const start = (safePage - 1) * pageSize
+  return {
+    pageItems: items.slice(start, start + pageSize),
+    totalPages,
+    safePage,
+  }
+}
+
+function compareValues(left, right) {
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right
+  }
+  return String(left || '').localeCompare(String(right || ''), undefined, { sensitivity: 'base' })
+}
+
+function sortRows(rows, sortConfig) {
+  const { key, direction } = sortConfig
+  const sorted = [...rows].sort((a, b) => compareValues(a[key], b[key]))
+  return direction === 'desc' ? sorted.reverse() : sorted
+}
+
+function validateCreateMaidForm(form, photoFile) {
+  const errors = {}
+  if (!String(form.name || '').trim()) errors.name = 'Name is required.'
+  if (Number(form.age) < 18) errors.age = 'Age must be 18 or above.'
+  if (!String(form.languages || '').trim()) errors.languages = 'At least one language is required.'
+  if (!String(form.expected_salary || '').trim()) errors.expected_salary = 'Expected salary is required.'
+  if (!photoFile) errors.photo = 'Profile photo is required.'
+  return errors
+}
+
 function readStoredList(key) {
   try {
     const raw = window.localStorage.getItem(key)
@@ -39,6 +80,14 @@ function writeStoredList(key, value) {
     window.localStorage.setItem(key, JSON.stringify(value))
   } catch {
     // Ignore localStorage write failures in private or restricted contexts.
+  }
+}
+
+async function trackRecentEmployerView(token, maidId) {
+  try {
+    await apiRequest(`/employer/recent/${maidId}`, { method: 'POST', token })
+  } catch {
+    // Ignore tracking failures so profile navigation is never blocked.
   }
 }
 
@@ -138,24 +187,44 @@ export default function DashboardPage() {
   const [agencyModerationInFlightId, setAgencyModerationInFlightId] = useState(null)
   const [pendingModerationAction, setPendingModerationAction] = useState(null)
   const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
+  const [pendingDeleteMaid, setPendingDeleteMaid] = useState(null)
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [isSavingContact, setIsSavingContact] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [browsePage, setBrowsePage] = useState(1)
+  const [activatedPage, setActivatedPage] = useState(1)
+  const [pendingAgencyPage, setPendingAgencyPage] = useState(1)
+  const [subscriptionPage, setSubscriptionPage] = useState(1)
+  const [visitsPage, setVisitsPage] = useState(1)
+  const [toasts, setToasts] = useState([])
+  const [activatedSort, setActivatedSort] = useState({ key: 'agency_id', direction: 'asc' })
+  const [pendingSort, setPendingSort] = useState({ key: 'created_at', direction: 'desc' })
+  const [subscriptionSort, setSubscriptionSort] = useState({ key: 'ID', direction: 'desc' })
+  const [visitsSort, setVisitsSort] = useState({ key: 'visits', direction: 'desc' })
+  const lastQueryErrorRef = useRef('')
 
   const isAgency = user?.role === 'AGENCY'
   const isAdmin = user?.role === 'ADMIN'
   const isEmployer = user?.role === 'EMPLOYER'
   const employerSavedKey = `employer_saved_profiles_${user?.id || 'anon'}`
-  const employerRecentKey = `employer_recent_views_${user?.id || 'anon'}`
   const employerContactedKey = `employer_contacted_agencies_${user?.id || 'anon'}`
   const showBrowseView = activeView === 'browse' || isAgency
   const showAgencyView = isAgency
 
   useEffect(() => {
     if (!isEmployer) return
-    setSavedProfiles(readStoredList(employerSavedKey))
-    setRecentViews(readStoredList(employerRecentKey))
     setContactedAgencies(readStoredList(employerContactedKey))
-  }, [isEmployer, employerSavedKey, employerRecentKey, employerContactedKey])
+  }, [isEmployer, employerContactedKey])
+
+  useEffect(() => {
+    if (!isEmployer) return
+    setSavedProfiles(employerSavedQuery.data || [])
+  }, [isEmployer, employerSavedQuery.data])
+
+  useEffect(() => {
+    if (!isEmployer) return
+    setRecentViews(employerRecentQuery.data || [])
+  }, [isEmployer, employerRecentQuery.data])
 
   const routedMaidId = useMemo(() => {
     if (params.maidId && /^\d+$/.test(params.maidId)) {
@@ -215,12 +284,26 @@ export default function DashboardPage() {
     enabled: Boolean(token) && isAdmin,
   })
 
+  const employerSavedQuery = useQuery({
+    queryKey: ['employer-saved', token],
+    queryFn: () => apiRequest('/employer/saved', { token }),
+    enabled: Boolean(token) && isEmployer,
+  })
+
+  const employerRecentQuery = useQuery({
+    queryKey: ['employer-recent', token],
+    queryFn: () => apiRequest('/employer/recent', { token }),
+    enabled: Boolean(token) && isEmployer,
+  })
+
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
 
   const isDashboardBusy =
     browseQuery.isFetching ||
     myMaidsQuery.isFetching ||
     agencyContactQuery.isFetching ||
+    employerSavedQuery.isFetching ||
+    employerRecentQuery.isFetching ||
     subscriptionsQuery.isFetching ||
     pendingAgenciesQuery.isFetching ||
     activatedAgenciesQuery.isFetching ||
@@ -231,8 +314,9 @@ export default function DashboardPage() {
     isDeletingAccount ||
     isSavingContact
 
-  const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || activatedAgenciesQuery.error || visitStatsQuery.error
+  const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || employerSavedQuery.error || employerRecentQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || activatedAgenciesQuery.error || visitStatsQuery.error
   const displayError = error || (queryError && queryError.message !== 'Session expired. Please login again.' ? queryError.message : '')
+  const maidFormErrors = useMemo(() => validateCreateMaidForm(maidForm, photoFile), [maidForm, photoFile])
 
   useEffect(() => {
     if (queryError?.message === 'Session expired. Please login again.') {
@@ -240,6 +324,41 @@ export default function DashboardPage() {
       navigate('/login')
     }
   }, [queryError, logout, navigate])
+
+  useEffect(() => {
+    if (!message) return
+    const id = Date.now() + Math.random()
+    setToasts((prev) => [...prev, { id, type: 'ok', text: message }])
+    setMessage('')
+    const timeoutId = window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id))
+    }, 4000)
+    return () => window.clearTimeout(timeoutId)
+  }, [message])
+
+  useEffect(() => {
+    if (!error) return
+    const id = Date.now() + Math.random()
+    setToasts((prev) => [...prev, { id, type: 'err', text: error }])
+    setError('')
+    const timeoutId = window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id))
+    }, 5000)
+    return () => window.clearTimeout(timeoutId)
+  }, [error])
+
+  useEffect(() => {
+    const queryErrorMessage = queryError?.message
+    if (!queryErrorMessage || queryErrorMessage === 'Session expired. Please login again.') return
+    if (lastQueryErrorRef.current === queryErrorMessage) return
+    lastQueryErrorRef.current = queryErrorMessage
+    const id = Date.now() + Math.random()
+    setToasts((prev) => [...prev, { id, type: 'err', text: queryErrorMessage }])
+    const timeoutId = window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id))
+    }, 5000)
+    return () => window.clearTimeout(timeoutId)
+  }, [queryError])
 
   useEffect(() => {
     if (!message) return
@@ -261,6 +380,30 @@ export default function DashboardPage() {
     if (routedMaidId === null) return maids
     return maids.filter((maid) => maid.ID === routedMaidId)
   }, [browseQuery.data, routedMaidId])
+
+  const searchedMaids = useMemo(() => {
+    const needle = searchTerm.trim().toLowerCase()
+    if (!needle) return displayedMaids
+    return displayedMaids.filter((maid) => {
+      const haystack = [maid.name, maid.languages, maid.narrative, maid.expected_salary, maid.availability_status]
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(needle)
+    })
+  }, [displayedMaids, searchTerm])
+
+  const browsePageData = useMemo(
+    () => paginateItems(searchedMaids, browsePage, PAGE_SIZE_BROWSE),
+    [searchedMaids, browsePage],
+  )
+
+  useEffect(() => {
+    setBrowsePage(1)
+  }, [searchTerm, appliedFilters, routedMaidId])
+
+  useEffect(() => {
+    setBrowsePage((page) => clampPage(page, browsePageData.totalPages))
+  }, [browsePageData.totalPages])
 
   const agencyMaids = useMemo(() => myMaidsQuery.data || [], [myMaidsQuery.data])
   const agencyAvgHealth = useMemo(() => {
@@ -374,38 +517,39 @@ export default function DashboardPage() {
     }
   }, [isAgency, isEmployer, navigate])
 
-  function persistSavedProfiles(next) {
-    setSavedProfiles(next)
-    writeStoredList(employerSavedKey, next)
-  }
-
-  function persistRecentViews(next) {
-    setRecentViews(next)
-    writeStoredList(employerRecentKey, next)
-  }
-
   function persistContactedAgencies(next) {
     setContactedAgencies(next)
     writeStoredList(employerContactedKey, next)
   }
 
-  function toggleSavedProfile(maid) {
+  async function toggleSavedProfile(maid) {
     if (!isEmployer) return
+    setError('')
+
     const exists = savedProfiles.some((entry) => entry.id === maid.ID)
-    const next = exists
-      ? savedProfiles.filter((entry) => entry.id !== maid.ID)
-      : [{ id: maid.ID, name: maid.name, availability: maid.availability_status, saved_at: new Date().toISOString() }, ...savedProfiles].slice(0, 30)
-    persistSavedProfiles(next)
-    setMessage(exists ? 'Profile removed from saved list.' : 'Profile saved to your dashboard.')
+    try {
+      if (exists) {
+        await apiRequest(`/employer/saved/${maid.ID}`, { method: 'DELETE', token })
+      } else {
+        await apiRequest(`/employer/saved/${maid.ID}`, { method: 'POST', token })
+      }
+      await queryClient.invalidateQueries({ queryKey: ['employer-saved', token] })
+      setMessage(exists ? 'Profile removed from saved list.' : 'Profile saved to your dashboard.')
+    } catch (err) {
+      if (err.message === 'Session expired. Please login again.') {
+        logout()
+        navigate('/login')
+        return
+      }
+      setError(err.message)
+    }
   }
 
   function recordRecentView(maid) {
     if (!isEmployer) return
-    const next = [
-      { id: maid.ID, name: maid.name, viewed_at: new Date().toISOString(), availability: maid.availability_status },
-      ...recentViews.filter((entry) => entry.id !== maid.ID),
-    ].slice(0, 20)
-    persistRecentViews(next)
+    trackRecentEmployerView(token, maid.ID).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['employer-recent', token] })
+    })
   }
 
   function recordContactedAgency(maid) {
@@ -428,6 +572,11 @@ export default function DashboardPage() {
     event.preventDefault()
     setMessage('')
     setError('')
+    const validationErrors = validateCreateMaidForm(maidForm, photoFile)
+    if (Object.keys(validationErrors).length > 0) {
+      setError('Please fix the highlighted form fields before submitting.')
+      return
+    }
     try {
       const formData = new FormData()
       formData.append('name', maidForm.name)
@@ -482,6 +631,12 @@ export default function DashboardPage() {
       }
       setError(err.message)
     }
+  }
+
+  async function confirmDeleteMaid() {
+    if (!pendingDeleteMaid?.ID) return
+    await deleteMaid(pendingDeleteMaid.ID)
+    setPendingDeleteMaid(null)
   }
 
   function startEditMaid(maid) {
@@ -625,11 +780,44 @@ export default function DashboardPage() {
   const adminSubscriptions = subscriptionsQuery.data || []
   const pendingAgencies = pendingAgenciesQuery.data || []
   const activatedAgencies = activatedAgenciesQuery.data || []
+
+  const sortedActivatedAgencies = useMemo(
+    () => sortRows(activatedAgencies, activatedSort),
+    [activatedAgencies, activatedSort],
+  )
+  const sortedPendingAgencies = useMemo(
+    () => sortRows(pendingAgencies, pendingSort),
+    [pendingAgencies, pendingSort],
+  )
+  const sortedSubscriptions = useMemo(
+    () => sortRows(adminSubscriptions, subscriptionSort),
+    [adminSubscriptions, subscriptionSort],
+  )
+  const sortedTopEmployers = useMemo(
+    () => sortRows(topEmployers, visitsSort),
+    [topEmployers, visitsSort],
+  )
+
+  const activatedPageData = useMemo(
+    () => paginateItems(sortedActivatedAgencies, activatedPage, PAGE_SIZE_TABLE),
+    [sortedActivatedAgencies, activatedPage],
+  )
+  const pendingPageData = useMemo(
+    () => paginateItems(sortedPendingAgencies, pendingAgencyPage, PAGE_SIZE_TABLE),
+    [sortedPendingAgencies, pendingAgencyPage],
+  )
+  const subscriptionsPageData = useMemo(
+    () => paginateItems(sortedSubscriptions, subscriptionPage, PAGE_SIZE_TABLE),
+    [sortedSubscriptions, subscriptionPage],
+  )
+  const visitsPageData = useMemo(
+    () => paginateItems(sortedTopEmployers, visitsPage, PAGE_SIZE_TABLE),
+    [sortedTopEmployers, visitsPage],
+  )
   const pendingSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PENDING')
   const failedSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'FAILED')
   const visitStats = visitStatsQuery.data || {}
   const topEmployers = visitStats.top_employers || []
-
   async function updateAgencyContact(event) {
     event.preventDefault()
     setMessage('')
@@ -728,8 +916,6 @@ export default function DashboardPage() {
     setIsDeletingAccount(true)
     try {
       await apiRequest('/account', { method: 'DELETE', token })
-      window.localStorage.removeItem(employerSavedKey)
-      window.localStorage.removeItem(employerRecentKey)
       window.localStorage.removeItem(employerContactedKey)
       logout()
       setPendingDeleteAccount(false)
@@ -744,6 +930,25 @@ export default function DashboardPage() {
     } finally {
       setIsDeletingAccount(false)
     }
+  }
+
+  function toggleSort(setter, current, nextKey) {
+    if (current.key === nextKey) {
+      setter({ key: nextKey, direction: current.direction === 'asc' ? 'desc' : 'asc' })
+      return
+    }
+    setter({ key: nextKey, direction: 'asc' })
+  }
+
+  function renderPager(page, totalPages, setPage) {
+    if (totalPages <= 1) return null
+    return (
+      <div className="pager" role="navigation" aria-label="Pagination">
+        <button className="btn secondary pager-btn" type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+        <span className="muted">Page {page} of {totalPages}</span>
+        <button className="btn secondary pager-btn" type="button" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</button>
+      </div>
+    )
   }
 
   return (
@@ -926,9 +1131,11 @@ export default function DashboardPage() {
 
                   {(() => {
                     const contactNumber = maid.agency_whatsapp || maid.agency_phone
-                    const contactUrl = contactNumber
-                      ? buildWhatsAppUrlFromPhone(contactNumber, buildMaidDiscussionMessage(maid))
-                      : maid.agency_whatsapp_url || ''
+                    const contactUrl = buildWhatsAppDirectUrl({
+                      phone: contactNumber,
+                      whatsAppUrl: maid.agency_whatsapp_url,
+                      message: buildMaidDiscussionMessage(maid),
+                    })
                     return (
                       <div className="icon-actions">
                         {isEmployer && (

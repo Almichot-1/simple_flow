@@ -42,6 +42,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.MaidProfile{},
 		&models.Subscription{},
 		&models.EmployerAgencyVisit{},
+		&models.EmployerSavedProfile{},
+		&models.EmployerRecentView{},
 	)
 }
 

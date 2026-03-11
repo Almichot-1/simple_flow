@@ -29,6 +29,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	agencyHandler := handlers.NewAgencyHandler(db)
 	browseHandler := handlers.NewBrowseHandler(db)
 	adminHandler := handlers.NewAdminHandler(db)
+	employerHandler := handlers.NewEmployerHandler(db)
 
 	r.GET("/public/maids/:id", browseHandler.PublicMaidProfile)
 
@@ -56,6 +57,16 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 			agency.GET("/contact", agencyHandler.GetAgencyContact)
 			agency.PATCH("/contact", agencyHandler.UpdateAgencyContact)
 			agency.POST("/subscribe", agencyHandler.RequestSubscription)
+		}
+
+		employer := protected.Group("/employer")
+		employer.Use(middleware.EmployerOnly())
+		{
+			employer.GET("/saved", employerHandler.ListSavedProfiles)
+			employer.POST("/saved/:maidId", employerHandler.SaveProfile)
+			employer.DELETE("/saved/:maidId", employerHandler.UnsaveProfile)
+			employer.GET("/recent", employerHandler.ListRecentViews)
+			employer.POST("/recent/:maidId", employerHandler.TrackRecentView)
 		}
 
 		admin := protected.Group("/admin")
