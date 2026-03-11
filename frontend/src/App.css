@@ -273,6 +273,129 @@ li {
   margin: 0.2rem 0 0.55rem;
 }
 
+.results-count {
+  margin-top: 0.45rem;
+}
+
+.empty-state {
+  border: 1px dashed #cfd8e3;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.65rem;
+  margin: 0.4rem 0;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1200;
+  display: grid;
+  gap: 0.45rem;
+  width: min(360px, calc(100vw - 1.5rem));
+}
+
+.toast-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 12px;
+  border: 1px solid #d9e1ea;
+  padding: 0.55rem 0.65rem;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(12, 23, 40, 0.16);
+  animation: card-rise 240ms ease both;
+}
+
+.toast-item.ok {
+  border-color: #8bd8b3;
+}
+
+.toast-item.err {
+  border-color: #f2a4a0;
+}
+
+.toast-close {
+  width: auto;
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  font-size: 0.75rem;
+}
+
+.pager {
+  margin-top: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.pager-btn {
+  width: auto;
+  margin: 0;
+  padding: 0.32rem 0.68rem;
+}
+
+.th-sort {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.input-invalid {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 1px rgba(217, 45, 32, 0.18);
+}
+
+.field-error {
+  margin: -0.2rem 0 0.35rem;
+  color: #b42318;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.list-skeleton-wrap {
+  margin: 0.45rem 0 0.7rem;
+}
+
+.profile-name-ellipsis {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maid-completeness {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.progress-track {
+  width: 100%;
+  border-radius: 999px;
+  background: #e7eef6;
+  height: 0.5rem;
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0ea5a4, #2563eb);
+}
+
 .maids-grid {
   margin-top: 0.8rem;
   display: grid;
@@ -796,6 +919,89 @@ li {
   color: #475467;
 }
 
+.status-live {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-hidden {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-incomplete {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.agency-onboarding-card.is-required {
+  border-color: #f7b27a;
+  background: linear-gradient(180deg, #fffaf4, #fff7ed);
+}
+
+.agency-onboarding-card.is-ready {
+  border-color: #86efac;
+  background: linear-gradient(180deg, #f7fff9, #effcf3);
+}
+
+.agency-contact-form .crud-actions .btn {
+  width: auto;
+}
+
+.role-panel-action {
+  cursor: pointer;
+}
+
+.agency-filter-bar .is-active {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.38);
+}
+
+.bulk-actions-bar {
+  margin: 0.6rem 0;
+  align-items: center;
+}
+
+.bulk-select-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  color: #344054;
+}
+
+.bulk-select-toggle input {
+  width: auto;
+  margin: 0;
+}
+
+.agency-profile-cards {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.8rem;
+}
+
+.agency-profile-card {
+  border: 1px solid #d9e1ea;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.agency-profile-media {
+  height: 180px;
+  background: #f2f4f7;
+}
+
+.agency-profile-body {
+  padding: 0.75rem;
+}
+
+.top-signout-btn {
+  min-height: 44px;
+  padding: 0.45rem 0.9rem;
+}
+
 .public-profile-page {
   min-height: 100vh;
   background:
@@ -1093,6 +1299,51 @@ li {
 
   .top-signout-btn {
     align-self: stretch;
+    text-align: center;
+  }
+
+  .crud-actions .btn,
+  .crud-actions .icon-btn {
+    min-height: 44px;
+  }
+
+  .bulk-actions-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bulk-actions-bar .btn {
+    width: 100%;
+  }
+
+  .agency-profile-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toast-stack {
+    right: 0.6rem;
+    left: 0.6rem;
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dashboard-tabs {
+    width: 100%;
+  }
+
+  .tab-btn {
+    flex: 1;
     text-align: center;
   }
 }

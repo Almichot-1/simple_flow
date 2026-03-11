@@ -115,6 +115,23 @@ function getMaidMissingFields(maid) {
   return missing
 }
 
+function getAgencyProfileVisibility(maid) {
+  const isAvailable = String(maid.availability_status || '').toUpperCase() === 'AVAILABLE'
+  const isComplete = getMaidMissingFields(maid).length === 0
+
+  if (!isAvailable) {
+    return { label: 'Hidden', className: 'status-hidden' }
+  }
+  if (!isComplete) {
+    return { label: 'Incomplete', className: 'status-incomplete' }
+  }
+  return { label: 'Live', className: 'status-live' }
+}
+
+function normalizeDigits(value) {
+  return String(value || '').replace(/\D/g, '')
+}
+
 function WhatsAppIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -161,12 +178,16 @@ export default function DashboardPage() {
     experience_years: 1,
     expected_salary: '',
     languages: 'Amharic,Arabic',
-    narrative: '',
     availability_status: 'AVAILABLE',
   })
   const [photoFile, setPhotoFile] = useState(null)
   const [videoFile, setVideoFile] = useState(null)
+  const [editPhotoFile, setEditPhotoFile] = useState(null)
+  const [editVideoFile, setEditVideoFile] = useState(null)
   const [editingMaidId, setEditingMaidId] = useState(null)
+  const [showAgencyForm, setShowAgencyForm] = useState(false)
+  const [agencyProfileFilter, setAgencyProfileFilter] = useState('all')
+  const [selectedAgencyMaidIds, setSelectedAgencyMaidIds] = useState([])
   const [editMaidForm, setEditMaidForm] = useState({
     name: '',
     age: 18,
@@ -297,6 +318,7 @@ export default function DashboardPage() {
   })
 
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
+  const isWhatsappConfigured = normalizeDigits(agencyWhatsappPhone).length > 0
 
   const isDashboardBusy =
     browseQuery.isFetching ||
@@ -315,7 +337,6 @@ export default function DashboardPage() {
     isSavingContact
 
   const queryError = browseQuery.error || myMaidsQuery.error || agencyContactQuery.error || employerSavedQuery.error || employerRecentQuery.error || subscriptionsQuery.error || pendingAgenciesQuery.error || activatedAgenciesQuery.error || visitStatsQuery.error
-  const displayError = error || (queryError && queryError.message !== 'Session expired. Please login again.' ? queryError.message : '')
   const maidFormErrors = useMemo(() => validateCreateMaidForm(maidForm, photoFile), [maidForm, photoFile])
 
   useEffect(() => {
@@ -406,6 +427,18 @@ export default function DashboardPage() {
   }, [browsePageData.totalPages])
 
   const agencyMaids = useMemo(() => myMaidsQuery.data || [], [myMaidsQuery.data])
+  const filteredAgencyMaids = useMemo(() => {
+    if (agencyProfileFilter === 'incomplete') {
+      return agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0)
+    }
+    if (agencyProfileFilter === 'missing-photo') {
+      return agencyMaids.filter((maid) => !String(maid.photo_url || '').trim())
+    }
+    if (agencyProfileFilter === 'hidden') {
+      return agencyMaids.filter((maid) => String(maid.availability_status || '').toUpperCase() !== 'AVAILABLE')
+    }
+    return agencyMaids
+  }, [agencyMaids, agencyProfileFilter])
   const agencyAvgHealth = useMemo(() => {
     if (!agencyMaids.length) return 0
     const total = agencyMaids.reduce((acc, maid) => acc + getMaidCompleteness(maid), 0)
@@ -423,6 +456,10 @@ export default function DashboardPage() {
     () => agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
     [agencyMaids],
   )
+
+  useEffect(() => {
+    setSelectedAgencyMaidIds((prev) => prev.filter((id) => filteredAgencyMaids.some((maid) => maid.ID === id)))
+  }, [filteredAgencyMaids])
 
   const adminSlaHours = useMemo(() => {
     if (!pendingAgenciesQuery.data?.length) return 0
@@ -572,6 +609,13 @@ export default function DashboardPage() {
     event.preventDefault()
     setMessage('')
     setError('')
+
+    if (!isWhatsappConfigured) {
+      setError('Set your WhatsApp number before creating profiles so employers can contact you.')
+      document.getElementById('agency-whatsapp-onboarding')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
     const validationErrors = validateCreateMaidForm(maidForm, photoFile)
     if (Object.keys(validationErrors).length > 0) {
       setError('Please fix the highlighted form fields before submitting.')
@@ -584,7 +628,6 @@ export default function DashboardPage() {
       formData.append('experience_years', String(maidForm.experience_years))
       formData.append('expected_salary', maidForm.expected_salary)
       formData.append('languages', maidForm.languages)
-      formData.append('narrative', maidForm.narrative)
       formData.append('availability_status', maidForm.availability_status)
       if (photoFile) formData.append('photo', photoFile)
       if (videoFile) formData.append('video', videoFile)
@@ -599,9 +642,9 @@ export default function DashboardPage() {
         experience_years: 1,
         expected_salary: '',
         languages: 'Amharic,Arabic',
-        narrative: '',
         availability_status: 'AVAILABLE',
       })
+      setShowAgencyForm(false)
 
       queryClient.invalidateQueries({ queryKey: ['agency-maids', token] })
       queryClient.invalidateQueries({ queryKey: ['maids'] })
@@ -635,12 +678,23 @@ export default function DashboardPage() {
 
   async function confirmDeleteMaid() {
     if (!pendingDeleteMaid?.ID) return
-    await deleteMaid(pendingDeleteMaid.ID)
+    if (pendingDeleteMaid.isBulk) {
+      const ids = [...selectedAgencyMaidIds]
+      for (const maidID of ids) {
+        await deleteMaid(maidID)
+      }
+      setSelectedAgencyMaidIds([])
+    } else {
+      await deleteMaid(pendingDeleteMaid.ID)
+    }
     setPendingDeleteMaid(null)
   }
 
   function startEditMaid(maid) {
     setEditingMaidId(maid.ID)
+    setShowAgencyForm(true)
+    setEditPhotoFile(null)
+    setEditVideoFile(null)
     setEditMaidForm({
       name: maid.name || '',
       age: Number(maid.age || 18),
@@ -654,6 +708,8 @@ export default function DashboardPage() {
 
   function cancelEditMaid() {
     setEditingMaidId(null)
+    setEditPhotoFile(null)
+    setEditVideoFile(null)
   }
 
   async function updateMaid(id) {
@@ -661,18 +717,28 @@ export default function DashboardPage() {
     setError('')
 
     try {
+      const formData = new FormData()
+      formData.append('name', editMaidForm.name)
+      formData.append('age', String(Number(editMaidForm.age)))
+      formData.append('experience_years', String(Number(editMaidForm.experience_years)))
+      formData.append('expected_salary', editMaidForm.expected_salary)
+      formData.append('languages', editMaidForm.languages)
+      formData.append('narrative', editMaidForm.narrative)
+      formData.append('availability_status', editMaidForm.availability_status)
+      if (editPhotoFile) formData.append('photo', editPhotoFile)
+      if (editVideoFile) formData.append('video', editVideoFile)
+
       await apiRequest(`/agency/maids/${id}`, {
         method: 'PUT',
         token,
-        body: {
-          ...editMaidForm,
-          age: Number(editMaidForm.age),
-          experience_years: Number(editMaidForm.experience_years),
-        },
+        body: formData,
       })
 
       setMessage('Maid profile updated.')
       setEditingMaidId(null)
+      setEditPhotoFile(null)
+      setEditVideoFile(null)
+      setShowAgencyForm(false)
       queryClient.invalidateQueries({ queryKey: ['agency-maids', token] })
       queryClient.invalidateQueries({ queryKey: ['maids'] })
     } catch (err) {
@@ -683,6 +749,79 @@ export default function DashboardPage() {
       }
       setError(err.message)
     }
+  }
+
+  function focusAgencyProfiles() {
+    document.getElementById('agency-profiles-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function applyAgencyFilter(nextFilter) {
+    setAgencyProfileFilter(nextFilter)
+    focusAgencyProfiles()
+  }
+
+  function toggleAgencyMaidSelection(maidId) {
+    setSelectedAgencyMaidIds((prev) => (
+      prev.includes(maidId) ? prev.filter((id) => id !== maidId) : [...prev, maidId]
+    ))
+  }
+
+  function toggleSelectAllFilteredAgencyMaids() {
+    const allVisibleIds = filteredAgencyMaids.map((maid) => maid.ID)
+    const allAlreadySelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedAgencyMaidIds.includes(id))
+    if (allAlreadySelected) {
+      setSelectedAgencyMaidIds([])
+      return
+    }
+    setSelectedAgencyMaidIds(allVisibleIds)
+  }
+
+  async function bulkUpdateAvailability(nextStatus) {
+    if (selectedAgencyMaidIds.length === 0) {
+      setError('Select at least one profile first.')
+      return
+    }
+    const selectedProfiles = agencyMaids.filter((maid) => selectedAgencyMaidIds.includes(maid.ID))
+    try {
+      await Promise.all(selectedProfiles.map((maid) => apiRequest(`/agency/maids/${maid.ID}`, {
+        method: 'PUT',
+        token,
+        body: {
+          name: maid.name,
+          age: Number(maid.age),
+          experience_years: Number(maid.experience_years || 0),
+          expected_salary: maid.expected_salary || '',
+          languages: maid.languages || '',
+          narrative: maid.narrative || '',
+          availability_status: nextStatus,
+          photo_url: maid.photo_url || '',
+          intro_video_url: maid.intro_video_url || '',
+        },
+      })))
+      setSelectedAgencyMaidIds([])
+      setMessage(`Updated ${selectedProfiles.length} profiles to ${nextStatus}.`)
+      queryClient.invalidateQueries({ queryKey: ['agency-maids', token] })
+      queryClient.invalidateQueries({ queryKey: ['maids'] })
+    } catch (err) {
+      if (err.message === 'Session expired. Please login again.') {
+        logout()
+        navigate('/login')
+        return
+      }
+      setError(err.message)
+    }
+  }
+
+  function requestBulkDelete() {
+    if (selectedAgencyMaidIds.length === 0) {
+      setError('Select at least one profile first.')
+      return
+    }
+    setPendingDeleteMaid({
+      ID: selectedAgencyMaidIds[0],
+      name: `${selectedAgencyMaidIds.length} selected profiles`,
+      isBulk: true,
+    })
   }
 
   async function approveAgency(event) {
@@ -777,9 +916,9 @@ export default function DashboardPage() {
     setPendingModerationAction(null)
   }
 
-  const adminSubscriptions = subscriptionsQuery.data || []
-  const pendingAgencies = pendingAgenciesQuery.data || []
-  const activatedAgencies = activatedAgenciesQuery.data || []
+  const adminSubscriptions = useMemo(() => subscriptionsQuery.data || [], [subscriptionsQuery.data])
+  const pendingAgencies = useMemo(() => pendingAgenciesQuery.data || [], [pendingAgenciesQuery.data])
+  const activatedAgencies = useMemo(() => activatedAgenciesQuery.data || [], [activatedAgenciesQuery.data])
 
   const sortedActivatedAgencies = useMemo(
     () => sortRows(activatedAgencies, activatedSort),
@@ -817,7 +956,7 @@ export default function DashboardPage() {
   const pendingSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'PENDING')
   const failedSubscriptions = adminSubscriptions.filter((sub) => String(sub.status || '').toUpperCase() === 'FAILED')
   const visitStats = visitStatsQuery.data || {}
-  const topEmployers = visitStats.top_employers || []
+  const topEmployers = useMemo(() => visitStats.top_employers || [], [visitStats.top_employers])
   async function updateAgencyContact(event) {
     event.preventDefault()
     setMessage('')
@@ -916,6 +1055,7 @@ export default function DashboardPage() {
     setIsDeletingAccount(true)
     try {
       await apiRequest('/account', { method: 'DELETE', token })
+      window.localStorage.removeItem(employerSavedKey)
       window.localStorage.removeItem(employerContactedKey)
       logout()
       setPendingDeleteAccount(false)
@@ -1248,21 +1388,53 @@ export default function DashboardPage() {
 
       {showAgencyView && (
         <>
+          <section className={`card elevated agency-onboarding-card ${isWhatsappConfigured ? 'is-ready' : 'is-required'}`} id="agency-whatsapp-onboarding">
+            <div className="section-head">
+              <h2>Employer Contact Setup</h2>
+              {!isWhatsappConfigured && <span className="status-tag status-incomplete">Required</span>}
+            </div>
+            <p className="muted">
+              {isWhatsappConfigured
+                ? 'Your WhatsApp is configured. Employers can contact your agency directly.'
+                : 'You need to set your WhatsApp number before employers can reach you.'}
+            </p>
+            <form onSubmit={updateAgencyContact} className="agency-contact-form">
+              <label htmlFor="agency-whatsapp">WhatsApp number</label>
+              <input
+                id="agency-whatsapp"
+                className={!isWhatsappConfigured ? 'input-invalid' : ''}
+                placeholder="WhatsApp number (e.g. +251911223344)"
+                value={agencyWhatsappPhone}
+                onChange={(e) => setAgencyWhatsappPhoneDraft(e.target.value)}
+              />
+              <div className="crud-actions">
+                <button className="btn" type="submit">Save WhatsApp Number</button>
+                {agencyContactQuery.data?.whatsapp_url && (
+                  <a className="btn secondary" href={agencyContactQuery.data.whatsapp_url} target="_blank" rel="noreferrer">Open My WhatsApp Link</a>
+                )}
+              </div>
+              {isSavingContact && <p className="muted">Saving contact...</p>}
+            </form>
+          </section>
+
           <section className="grid three role-grid">
-            <article className="card elevated role-panel">
+            <article className="card elevated role-panel role-panel-action" onClick={() => applyAgencyFilter('incomplete')}>
               <h3>Listing Health Score</h3>
               <h2 className="role-score">{agencyAvgHealth}%</h2>
-              <p className="muted">Average completeness across your profiles.</p>
+              <p className="muted">Fill salary and languages to move toward 100%.</p>
+              <button className="btn secondary table-action-btn" type="button">Fix Incomplete Profiles</button>
             </article>
-            <article className="card elevated role-panel">
+            <article className="card elevated role-panel role-panel-action" onClick={() => applyAgencyFilter('incomplete')}>
               <h3>Missing Fields</h3>
               <h2 className="role-score">{agencyMissingCoverage}</h2>
-              <p className="muted">Profiles still missing salary, media, language, or open availability.</p>
+              <p className="muted">Click to focus profiles missing key fields.</p>
+              <button className="btn secondary table-action-btn" type="button">Show Incomplete</button>
             </article>
-            <article className="card elevated role-panel">
+            <article className="card elevated role-panel role-panel-action" onClick={() => applyAgencyFilter('missing-photo')}>
               <h3>Profile Performance</h3>
               <h2 className="role-score">{agencyProfilesWithMedia}/{agencyMaids.length}</h2>
-              <p className="muted">Profiles with photo uploaded (stronger conversion signal).</p>
+              <p className="muted">Upload photos to improve profile trust and visibility.</p>
+              <button className="btn secondary table-action-btn" type="button">Highlight Missing Photos</button>
             </article>
           </section>
 
@@ -1282,115 +1454,241 @@ export default function DashboardPage() {
             </section>
           )}
 
-          <section className="grid two">
-            <form onSubmit={createMaid} className="card elevated" id="agency-create-section">
-            <h2>Create Maid Profile</h2>
-            <p className="muted">Upload real photo and optional intro video file (not URL).</p>
-            <label htmlFor="maid-name">Name</label>
-            <input id="maid-name" placeholder="Name" required value={maidForm.name} onChange={(e) => setMaidForm({ ...maidForm, name: e.target.value })} />
-            <label htmlFor="maid-age">Age</label>
-            <input id="maid-age" placeholder="Age" required min={18} type="number" value={maidForm.age} onChange={(e) => setMaidForm({ ...maidForm, age: e.target.value })} />
-            <label htmlFor="maid-exp">Experience</label>
-            <select id="maid-exp" value={maidForm.experience_years} onChange={(e) => setMaidForm({ ...maidForm, experience_years: Number(e.target.value) })}>
-              {EXPERIENCE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-            <label htmlFor="maid-salary">Expected Salary</label>
-            <input id="maid-salary" placeholder="Expected salary (e.g. 2500 SAR / month)" value={maidForm.expected_salary} onChange={(e) => setMaidForm({ ...maidForm, expected_salary: e.target.value })} />
-            <label htmlFor="maid-languages">Languages</label>
-            <input id="maid-languages" placeholder="Languages (comma-separated)" value={maidForm.languages} onChange={(e) => setMaidForm({ ...maidForm, languages: e.target.value })} />
-            <label htmlFor="maid-narrative">Narrative</label>
-            <textarea id="maid-narrative" placeholder="Narrative about this maid profile" value={maidForm.narrative} onChange={(e) => setMaidForm({ ...maidForm, narrative: e.target.value })} rows={4} />
-            <label htmlFor="maid-availability">Availability</label>
-            <select id="maid-availability" value={maidForm.availability_status} onChange={(e) => setMaidForm({ ...maidForm, availability_status: e.target.value })}>
-              <option value="AVAILABLE">AVAILABLE</option>
-              <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
-              <option value="BOOKED">BOOKED</option>
-            </select>
-            <p className="muted section-note">Note: choose `AVAILABLE` to make this profile easier to discover.</p>
-            <label className="file-label">Photo
-              <input type="file" accept="image/*" onChange={(e) => setPhotoFile(e.target.files?.[0] || null)} />
-            </label>
-            <label className="file-label">Intro Video (Optional)
-              <input type="file" accept="video/*" onChange={(e) => setVideoFile(e.target.files?.[0] || null)} />
-            </label>
-              <button className="btn" type="submit">Create Profile</button>
-            </form>
-
-            <div className="card full">
+          <section className="card full" id="agency-profiles-section">
             <div className="section-head">
               <h2>My Profiles</h2>
-              <button className="btn secondary" onClick={onRefreshMyProfiles}>Refresh</button>
+              <div className="crud-actions">
+                <button className="btn secondary" type="button" onClick={onRefreshMyProfiles}>Refresh</button>
+                <button className="btn" type="button" onClick={() => {
+                  setShowAgencyForm((prev) => !prev)
+                  setEditingMaidId(null)
+                  setEditPhotoFile(null)
+                  setEditVideoFile(null)
+                  setTimeout(() => document.getElementById('agency-create-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+                }}>
+                  {showAgencyForm ? 'Close Form' : 'Add Profile'}
+                </button>
+              </div>
             </div>
-            {myMaidsQuery.isLoading && <p className="muted">Loading agency profiles...</p>}
-            <ul className="list-clean">
-              {(myMaidsQuery.data || []).map((maid) => (
-                <li key={maid.ID}>
-                  {editingMaidId === maid.ID ? (
-                    <div className="maid-edit-grid">
-                      <input placeholder="Name" value={editMaidForm.name} onChange={(e) => setEditMaidForm({ ...editMaidForm, name: e.target.value })} />
-                      <input placeholder="Age" type="number" min={18} value={editMaidForm.age} onChange={(e) => setEditMaidForm({ ...editMaidForm, age: e.target.value })} />
-                      <select value={editMaidForm.experience_years} onChange={(e) => setEditMaidForm({ ...editMaidForm, experience_years: Number(e.target.value) })}>
-                        {EXPERIENCE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      <input placeholder="Expected salary" value={editMaidForm.expected_salary} onChange={(e) => setEditMaidForm({ ...editMaidForm, expected_salary: e.target.value })} />
-                      <input placeholder="Languages" value={editMaidForm.languages} onChange={(e) => setEditMaidForm({ ...editMaidForm, languages: e.target.value })} />
-                      <textarea placeholder="Narrative" value={editMaidForm.narrative} onChange={(e) => setEditMaidForm({ ...editMaidForm, narrative: e.target.value })} rows={3} />
-                      <select value={editMaidForm.availability_status} onChange={(e) => setEditMaidForm({ ...editMaidForm, availability_status: e.target.value })}>
-                        <option value="AVAILABLE">AVAILABLE</option>
-                        <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
-                        <option value="BOOKED">BOOKED</option>
-                      </select>
-                      <div className="maid-edit-actions">
-                        <button className="btn" type="button" onClick={() => updateMaid(maid.ID)}>Save</button>
-                        <button className="btn secondary" type="button" onClick={cancelEditMaid}>Cancel</button>
-                      </div>
+
+            <div className="crud-actions agency-filter-bar" role="group" aria-label="Profile filters">
+              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'all' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('all')}>All</button>
+              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'incomplete' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('incomplete')}>Incomplete</button>
+              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'missing-photo' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('missing-photo')}>Missing Photo</button>
+              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'hidden' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('hidden')}>Hidden</button>
+            </div>
+
+            <div className="crud-actions bulk-actions-bar">
+              <label className="bulk-select-toggle">
+                <input
+                  type="checkbox"
+                  checked={filteredAgencyMaids.length > 0 && filteredAgencyMaids.every((maid) => selectedAgencyMaidIds.includes(maid.ID))}
+                  onChange={toggleSelectAllFilteredAgencyMaids}
+                />
+                Select visible
+              </label>
+              <button className="btn secondary table-action-btn" type="button" onClick={() => bulkUpdateAvailability('BOOKED')}>Mark BOOKED</button>
+              <button className="btn secondary table-action-btn" type="button" onClick={() => bulkUpdateAvailability('NOT_AVAILABLE')}>Mark NOT_AVAILABLE</button>
+              <button className="btn danger table-action-btn" type="button" onClick={requestBulkDelete}>Delete Selected</button>
+            </div>
+
+            {myMaidsQuery.isLoading && (
+              <div className="list-skeleton-wrap" aria-label="Loading agency profiles">
+                {Array.from({ length: 4 }).map((_, index) => <p className="skeleton-line" key={`agency-skeleton-${index}`} />)}
+              </div>
+            )}
+            {!myMaidsQuery.isLoading && filteredAgencyMaids.length === 0 && (
+              <div className="empty-state">
+                <p className="muted">No profiles yet. Start by adding your first maid profile.</p>
+                <button className="btn" type="button" onClick={() => setShowAgencyForm(true)}>Add First Profile</button>
+              </div>
+            )}
+
+            <div className="agency-profile-cards">
+              {filteredAgencyMaids.map((maid) => {
+                const visibility = getAgencyProfileVisibility(maid)
+                const missing = getMaidMissingFields(maid)
+                const completeness = getMaidCompleteness(maid)
+                return (
+                  <article key={maid.ID} className="agency-profile-card">
+                    <div className="agency-profile-media">
+                      {maid.photo_url ? (
+                        <img src={mediaUrl(maid.photo_url)} alt={`${maid.name} thumbnail`} className="media-photo" />
+                      ) : (
+                        <div className="media-placeholder">No Photo</div>
+                      )}
                     </div>
-                  ) : (
-                    <>
-                      <span>{maid.name} • {maid.availability_status}</span>
+                    <div className="agency-profile-body">
+                      <div className="section-head">
+                        <h3 className="profile-name-ellipsis">{maid.name}</h3>
+                        <label className="bulk-select-toggle">
+                          <input
+                            type="checkbox"
+                            checked={selectedAgencyMaidIds.includes(maid.ID)}
+                            onChange={() => toggleAgencyMaidSelection(maid.ID)}
+                          />
+                          Select
+                        </label>
+                      </div>
+                      <p className="muted">{maid.age} years • {maid.experience_years} years • {maid.languages || '-'}</p>
+                      <p className="muted">Salary: {maid.expected_salary || '-'}</p>
+                      <div className="maid-completeness">
+                        <div className="progress-track" aria-label="Profile completeness progress">
+                          <span className="progress-fill" style={{ width: `${completeness}%` }} />
+                        </div>
+                        <p className="muted">Completeness: {completeness}% {missing.length ? `• Missing: ${missing.join(', ')}` : '• Complete profile'}</p>
+                      </div>
+                      <div className="crud-actions">
+                        <span className={`status-tag ${visibility.className}`}>{visibility.label}</span>
+                        <span className="status-tag status-active">{maid.availability_status}</span>
+                      </div>
                       <div className="crud-actions">
                         <button className="btn secondary" type="button" onClick={() => startEditMaid(maid)}>Edit</button>
-                        <button className="btn danger" type="button" onClick={() => deleteMaid(maid.ID)}>Delete</button>
-                        <button
-                          className="icon-btn secondary"
-                          aria-label={`Share ${maid.name} profile`}
-                          title="Share profile"
-                          onClick={() => shareMaidProfile(maid)}
-                          type="button"
-                        >
-                          <ShareIcon />
-                        </button>
+                        <button className="btn secondary" type="button" onClick={() => window.open(getMaidProfileLink(maid.ID), '_blank', 'noopener,noreferrer')}>Preview</button>
+                        <button className="btn danger" type="button" onClick={() => setPendingDeleteMaid(maid)}>Delete</button>
                         <button className="btn secondary" type="button" onClick={() => copyProfileLink(maid.ID)}>Copy Link</button>
                       </div>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-
-            <hr />
-            <h3>Agency WhatsApp Contact</h3>
-            <p className="muted">This number appears to employers so they can chat with your agency directly.</p>
-            <form onSubmit={updateAgencyContact}>
-              <label htmlFor="agency-whatsapp">WhatsApp number</label>
-              <input
-                id="agency-whatsapp"
-                placeholder="WhatsApp number (e.g. +251911223344)"
-                value={agencyWhatsappPhone}
-                onChange={(e) => setAgencyWhatsappPhoneDraft(e.target.value)}
-              />
-              <button className="btn" type="submit">Save WhatsApp Number</button>
-              {isSavingContact && <p className="muted">Saving contact...</p>}
-            </form>
-            {agencyContactQuery.data?.whatsapp_url && (
-              <a className="btn secondary" href={agencyContactQuery.data.whatsapp_url} target="_blank" rel="noreferrer">Open My WhatsApp Link</a>
-            )}
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           </section>
+
+          {showAgencyForm && (
+            <section className="card elevated" id="agency-create-section">
+              <div className="section-head">
+                <h2>{editingMaidId ? 'Edit Maid Profile' : 'Create Maid Profile'}</h2>
+                {editingMaidId && (
+                  <button className="btn secondary" type="button" onClick={cancelEditMaid}>Cancel Edit</button>
+                )}
+              </div>
+              <p className="muted">Upload real photo and optional intro video file (not URL).</p>
+
+              <form onSubmit={editingMaidId ? (event) => {
+                event.preventDefault()
+                updateMaid(editingMaidId)
+              } : createMaid}>
+                <label htmlFor="maid-name">Name</label>
+                <input
+                  id="maid-name"
+                  className={!editingMaidId && maidFormErrors.name ? 'input-invalid' : ''}
+                  placeholder="Name"
+                  required
+                  value={editingMaidId ? editMaidForm.name : maidForm.name}
+                  onChange={(e) => (editingMaidId
+                    ? setEditMaidForm({ ...editMaidForm, name: e.target.value })
+                    : setMaidForm({ ...maidForm, name: e.target.value }))}
+                />
+                {!editingMaidId && maidFormErrors.name && <p className="field-error">{maidFormErrors.name}</p>}
+
+                <label htmlFor="maid-age">Age</label>
+                <input
+                  id="maid-age"
+                  className={!editingMaidId && maidFormErrors.age ? 'input-invalid' : ''}
+                  placeholder="Age"
+                  required
+                  min={18}
+                  type="number"
+                  value={editingMaidId ? editMaidForm.age : maidForm.age}
+                  onChange={(e) => (editingMaidId
+                    ? setEditMaidForm({ ...editMaidForm, age: e.target.value })
+                    : setMaidForm({ ...maidForm, age: e.target.value }))}
+                />
+                {!editingMaidId && maidFormErrors.age && <p className="field-error">{maidFormErrors.age}</p>}
+
+                <label htmlFor="maid-exp">Experience</label>
+                <select
+                  id="maid-exp"
+                  value={editingMaidId ? editMaidForm.experience_years : maidForm.experience_years}
+                  onChange={(e) => (editingMaidId
+                    ? setEditMaidForm({ ...editMaidForm, experience_years: Number(e.target.value) })
+                    : setMaidForm({ ...maidForm, experience_years: Number(e.target.value) }))}
+                >
+                  {EXPERIENCE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+
+                <label htmlFor="maid-salary">Expected Salary</label>
+                <input
+                  id="maid-salary"
+                  className={!editingMaidId && maidFormErrors.expected_salary ? 'input-invalid' : ''}
+                  placeholder="Expected salary (e.g. 2500 SAR / month)"
+                  value={editingMaidId ? editMaidForm.expected_salary : maidForm.expected_salary}
+                  onChange={(e) => (editingMaidId
+                    ? setEditMaidForm({ ...editMaidForm, expected_salary: e.target.value })
+                    : setMaidForm({ ...maidForm, expected_salary: e.target.value }))}
+                />
+                {!editingMaidId && maidFormErrors.expected_salary && <p className="field-error">{maidFormErrors.expected_salary}</p>}
+
+                <label htmlFor="maid-languages">Languages</label>
+                <input
+                  id="maid-languages"
+                  className={!editingMaidId && maidFormErrors.languages ? 'input-invalid' : ''}
+                  placeholder="Languages (comma-separated)"
+                  value={editingMaidId ? editMaidForm.languages : maidForm.languages}
+                  onChange={(e) => (editingMaidId
+                    ? setEditMaidForm({ ...editMaidForm, languages: e.target.value })
+                    : setMaidForm({ ...maidForm, languages: e.target.value }))}
+                />
+                {!editingMaidId && maidFormErrors.languages && <p className="field-error">{maidFormErrors.languages}</p>}
+
+                {editingMaidId && (
+                  <>
+                    <label htmlFor="maid-narrative">Narrative</label>
+                    <textarea
+                      id="maid-narrative"
+                      placeholder="Narrative"
+                      value={editMaidForm.narrative}
+                      onChange={(e) => setEditMaidForm({ ...editMaidForm, narrative: e.target.value })}
+                      rows={4}
+                    />
+                  </>
+                )}
+
+                <label htmlFor="maid-availability">Availability</label>
+                <select
+                  id="maid-availability"
+                  value={editingMaidId ? editMaidForm.availability_status : maidForm.availability_status}
+                  onChange={(e) => (editingMaidId
+                    ? setEditMaidForm({ ...editMaidForm, availability_status: e.target.value })
+                    : setMaidForm({ ...maidForm, availability_status: e.target.value }))}
+                >
+                  <option value="AVAILABLE">AVAILABLE</option>
+                  <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
+                  <option value="BOOKED">BOOKED</option>
+                </select>
+
+                <label className="file-label">Photo</label>
+                <input
+                  className={!editingMaidId && maidFormErrors.photo ? 'input-invalid' : ''}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => (editingMaidId
+                    ? setEditPhotoFile(e.target.files?.[0] || null)
+                    : setPhotoFile(e.target.files?.[0] || null))}
+                />
+                {!editingMaidId && maidFormErrors.photo && <p className="field-error">{maidFormErrors.photo}</p>}
+
+                <label className="file-label">Intro Video (Optional)</label>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => (editingMaidId
+                    ? setEditVideoFile(e.target.files?.[0] || null)
+                    : setVideoFile(e.target.files?.[0] || null))}
+                />
+
+                <div className="crud-actions">
+                  <button className="btn" type="submit" disabled={!isWhatsappConfigured && !editingMaidId}>
+                    {editingMaidId ? 'Save Profile Changes' : 'Create Profile'}
+                  </button>
+                  <button className="btn secondary" type="button" onClick={() => setShowAgencyForm(false)}>Close</button>
+                </div>
+              </form>
+            </section>
+          )}
         </>
       )}
 
@@ -1505,7 +1803,10 @@ export default function DashboardPage() {
 
             {activatedAgenciesQuery.isLoading && <p className="muted">Loading activated agencies...</p>}
             {!activatedAgenciesQuery.isLoading && activatedAgencies.length === 0 && (
-              <p className="muted">No activated agencies yet.</p>
+              <div className="empty-state">
+                <p className="muted">No activated agencies yet.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={() => setActiveView('browse')}>View Marketplace</button>
+              </div>
             )}
 
             {activatedAgencies.length > 0 && (
@@ -1513,17 +1814,17 @@ export default function DashboardPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Agency ID</th>
-                      <th>Email</th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setActivatedSort, activatedSort, 'agency_id')}>Agency ID</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setActivatedSort, activatedSort, 'email')}>Email</button></th>
                       <th>Moderation</th>
-                      <th>Status</th>
-                      <th>Maid Profiles</th>
-                      <th>Last Login</th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setActivatedSort, activatedSort, 'subscription_status')}>Status</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setActivatedSort, activatedSort, 'maid_count')}>Maid Profiles</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setActivatedSort, activatedSort, 'last_login')}>Last Login</button></th>
                       <th>Controls</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {activatedAgencies.slice(0, 20).map((agency) => (
+                    {activatedPageData.pageItems.map((agency) => (
                       <tr key={agency.agency_id}>
                         <td>#{agency.agency_id}</td>
                         <td>{agency.email || '-'}</td>
@@ -1594,6 +1895,7 @@ export default function DashboardPage() {
                 </table>
               </div>
             )}
+            {renderPager(activatedPageData.safePage, activatedPageData.totalPages, setActivatedPage)}
           </article>
 
           <article className="card elevated admin-table-panel">
@@ -1602,9 +1904,16 @@ export default function DashboardPage() {
               <button className="btn secondary" onClick={() => pendingAgenciesQuery.refetch()}>Refresh Table</button>
             </div>
 
-            {pendingAgenciesQuery.isLoading && <p className="muted">Loading pending agencies...</p>}
+            {pendingAgenciesQuery.isLoading && (
+              <div className="list-skeleton-wrap" aria-label="Loading pending agencies">
+                {Array.from({ length: 5 }).map((_, index) => <p className="skeleton-line" key={`pending-loading-${index}`} />)}
+              </div>
+            )}
             {!pendingAgenciesQuery.isLoading && pendingAgencies.length === 0 && (
-              <p className="muted">No pending agency registrations.</p>
+              <div className="empty-state">
+                <p className="muted">No pending agency registrations.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={onRefreshAdminData}>Refresh Queue</button>
+              </div>
             )}
 
             {pendingAgencies.length > 0 && (
@@ -1612,16 +1921,16 @@ export default function DashboardPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Agency ID</th>
-                      <th>Email</th>
-                      <th>Country</th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setPendingSort, pendingSort, 'agency_id')}>Agency ID</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setPendingSort, pendingSort, 'email')}>Email</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setPendingSort, pendingSort, 'country')}>Country</button></th>
                       <th>Phone</th>
-                      <th>Registered</th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setPendingSort, pendingSort, 'created_at')}>Registered</button></th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingAgencies.slice(0, 20).map((agency) => (
+                    {pendingPageData.pageItems.map((agency) => (
                       <tr key={agency.agency_id}>
                         <td>#{agency.agency_id}</td>
                         <td>{agency.email || '-'}</td>
@@ -1643,6 +1952,7 @@ export default function DashboardPage() {
                 </table>
               </div>
             )}
+            {renderPager(pendingPageData.safePage, pendingPageData.totalPages, setPendingAgencyPage)}
           </article>
 
           <article className="card elevated admin-table-panel">
@@ -1651,9 +1961,16 @@ export default function DashboardPage() {
               <button className="btn secondary" onClick={() => subscriptionsQuery.refetch()}>Refresh Table</button>
             </div>
 
-            {subscriptionsQuery.isLoading && <p className="muted">Loading subscription requests...</p>}
+            {subscriptionsQuery.isLoading && (
+              <div className="list-skeleton-wrap" aria-label="Loading subscription requests">
+                {Array.from({ length: 5 }).map((_, index) => <p className="skeleton-line" key={`subs-loading-${index}`} />)}
+              </div>
+            )}
             {!subscriptionsQuery.isLoading && adminSubscriptions.length === 0 && (
-              <p className="muted">No subscription requests yet.</p>
+              <div className="empty-state">
+                <p className="muted">No subscription requests yet.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={onRefreshAdminData}>Refresh Payments</button>
+              </div>
             )}
 
             {adminSubscriptions.length > 0 && (
@@ -1661,17 +1978,17 @@ export default function DashboardPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>ID</th>
-                      <th>Agency</th>
-                      <th>Plan</th>
-                      <th>Months</th>
-                      <th>Status</th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setSubscriptionSort, subscriptionSort, 'ID')}>ID</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setSubscriptionSort, subscriptionSort, 'agency_id')}>Agency</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setSubscriptionSort, subscriptionSort, 'plan_type')}>Plan</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setSubscriptionSort, subscriptionSort, 'requested_months')}>Months</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setSubscriptionSort, subscriptionSort, 'status')}>Status</button></th>
                       <th>Transaction Ref</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {adminSubscriptions.slice(0, 12).map((sub) => {
+                    {subscriptionsPageData.pageItems.map((sub) => {
                       const isPending = String(sub.status || '').toUpperCase() === 'PENDING'
                       return (
                         <tr key={sub.ID}>
@@ -1702,6 +2019,7 @@ export default function DashboardPage() {
                 </table>
               </div>
             )}
+            {renderPager(subscriptionsPageData.safePage, subscriptionsPageData.totalPages, setSubscriptionPage)}
           </article>
 
           <article className="card elevated admin-table-panel">
@@ -1710,9 +2028,16 @@ export default function DashboardPage() {
               <button className="btn secondary" onClick={() => visitStatsQuery.refetch()}>Refresh Visits</button>
             </div>
 
-            {visitStatsQuery.isLoading && <p className="muted">Loading visit metrics...</p>}
+            {visitStatsQuery.isLoading && (
+              <div className="list-skeleton-wrap" aria-label="Loading visit metrics">
+                {Array.from({ length: 4 }).map((_, index) => <p className="skeleton-line" key={`visit-loading-${index}`} />)}
+              </div>
+            )}
             {!visitStatsQuery.isLoading && topEmployers.length === 0 && (
-              <p className="muted">No employer visits tracked yet.</p>
+              <div className="empty-state">
+                <p className="muted">No employer visits tracked yet.</p>
+                <button className="btn secondary table-action-btn" type="button" onClick={onRefreshAdminData}>Refresh Visits</button>
+              </div>
             )}
 
             {topEmployers.length > 0 && (
@@ -1720,13 +2045,13 @@ export default function DashboardPage() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Employer ID</th>
-                      <th>Email</th>
-                      <th>Visit Count</th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setVisitsSort, visitsSort, 'employer_id')}>Employer ID</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setVisitsSort, visitsSort, 'email')}>Email</button></th>
+                      <th><button className="th-sort" type="button" onClick={() => toggleSort(setVisitsSort, visitsSort, 'visits')}>Visit Count</button></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {topEmployers.map((entry) => (
+                    {visitsPageData.pageItems.map((entry) => (
                       <tr key={entry.employer_id}>
                         <td>#{entry.employer_id}</td>
                         <td>{entry.email || '-'}</td>
@@ -1737,6 +2062,7 @@ export default function DashboardPage() {
                 </table>
               </div>
             )}
+            {renderPager(visitsPageData.safePage, visitsPageData.totalPages, setVisitsPage)}
           </article>
         </section>
       )}
@@ -1775,6 +2101,21 @@ export default function DashboardPage() {
               <button className="btn danger" type="button" onClick={deleteEmployerAccount} disabled={isDeletingAccount}>
                 {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteMaid && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm maid deletion">
+          <div className="modal-card">
+            <h3>Delete Maid Profile</h3>
+            <p>
+              You are about to permanently delete <strong>{pendingDeleteMaid.name}</strong>. This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn secondary" type="button" onClick={() => setPendingDeleteMaid(null)}>Cancel</button>
+              <button className="btn danger" type="button" onClick={confirmDeleteMaid}>Delete Profile</button>
             </div>
           </div>
         </div>
