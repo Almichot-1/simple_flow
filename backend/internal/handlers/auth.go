@@ -247,3 +247,35 @@ func (h *AuthHandler) FirebaseLogin(c *gin.Context) {
 		},
 	})
 }
+
+func (h *AuthHandler) DeleteMyAccount(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	role := c.GetString("role")
+
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session"})
+		return
+	}
+
+	if role != models.RoleEmployer {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only employer accounts can self-delete"})
+		return
+	}
+
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("employer_id = ?", userID).Delete(&models.EmployerAgencyVisit{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("id = ?", userID).Delete(&models.User{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete account"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "account deleted"})
+}

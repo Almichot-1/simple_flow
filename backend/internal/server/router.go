@@ -43,6 +43,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 	{
 		protected.GET("/maids", browseHandler.ListMaids)
+		protected.DELETE("/account", authHandler.DeleteMyAccount)
 
 		agency := protected.Group("/agency")
 		agency.Use(middleware.AgencyOnly(db))

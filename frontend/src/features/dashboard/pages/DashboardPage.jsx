@@ -135,6 +135,8 @@ export default function DashboardPage() {
   const [isActivatingSubscription, setIsActivatingSubscription] = useState(false)
   const [agencyModerationInFlightId, setAgencyModerationInFlightId] = useState(null)
   const [pendingModerationAction, setPendingModerationAction] = useState(null)
+  const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [isSavingContact, setIsSavingContact] = useState(false)
 
   const isAgency = user?.role === 'AGENCY'
@@ -675,6 +677,30 @@ export default function DashboardPage() {
     navigate('/login')
   }
 
+  async function deleteEmployerAccount() {
+    setMessage('')
+    setError('')
+    setIsDeletingAccount(true)
+    try {
+      await apiRequest('/account', { method: 'DELETE', token })
+      window.localStorage.removeItem(employerSavedKey)
+      window.localStorage.removeItem(employerRecentKey)
+      window.localStorage.removeItem(employerContactedKey)
+      logout()
+      setPendingDeleteAccount(false)
+      navigate('/register')
+    } catch (err) {
+      if (err.message === 'Session expired. Please login again.') {
+        logout()
+        navigate('/login')
+        return
+      }
+      setError(err.message)
+    } finally {
+      setIsDeletingAccount(false)
+    }
+  }
+
   return (
     <main className="app">
       <header className="hero">
@@ -757,6 +783,12 @@ export default function DashboardPage() {
                 </li>
               ))}
             </ul>
+          </article>
+
+          <article className="card elevated role-panel danger-zone-panel">
+            <h3>Account Settings</h3>
+            <p className="muted">If you no longer need this employer account, you can permanently remove it.</p>
+            <button className="btn danger" type="button" onClick={() => setPendingDeleteAccount(true)}>Delete My Account</button>
           </article>
         </section>
       )}
@@ -1436,6 +1468,23 @@ export default function DashboardPage() {
             <div className="modal-actions">
               <button className="btn secondary" type="button" onClick={closeModerationModal}>Cancel</button>
               <button className="btn danger" type="button" onClick={confirmModerationAction}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteAccount && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm account deletion">
+          <div className="modal-card">
+            <h3>Delete Employer Account</h3>
+            <p>
+              This will permanently delete your employer account and visit history. This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn secondary" type="button" onClick={() => setPendingDeleteAccount(false)} disabled={isDeletingAccount}>Cancel</button>
+              <button className="btn danger" type="button" onClick={deleteEmployerAccount} disabled={isDeletingAccount}>
+                {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
+              </button>
             </div>
           </div>
         </div>
