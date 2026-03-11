@@ -50,6 +50,16 @@ func (h *BrowseHandler) ListMaids(c *gin.Context) {
 	query := h.db.Model(&models.MaidProfile{}).
 		Where("availability_status = ?", models.AvailAvailable)
 
+	if c.GetString("role") == models.RoleAgency {
+		userID := c.GetUint("user_id")
+		var agency models.AgencyProfile
+		if err := h.db.Select("id").Where("user_id = ?", userID).First(&agency).Error; err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "agency profile not found"})
+			return
+		}
+		query = query.Where("agency_id = ?", agency.ID)
+	}
+
 	if v := c.Query("age_min"); v != "" {
 		if ageMin, err := strconv.Atoi(v); err == nil {
 			query = query.Where("age >= ?", ageMin)
