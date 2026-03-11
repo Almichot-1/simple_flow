@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { apiRequest, apiBase } from '../../../shared/api/client'
+import { apiRequest } from '../../../shared/api/client'
 import { useAuth } from '../../auth/context/useAuth'
 import {
   buildWhatsAppUrlFromPhone,
@@ -112,6 +112,7 @@ export default function DashboardPage() {
     experience_years: 1,
     expected_salary: '',
     languages: 'Amharic,Arabic',
+    narrative: '',
     availability_status: 'AVAILABLE',
   })
   const [photoFile, setPhotoFile] = useState(null)
@@ -123,6 +124,7 @@ export default function DashboardPage() {
     experience_years: 0,
     expected_salary: '',
     languages: '',
+    narrative: '',
     availability_status: 'AVAILABLE',
   })
   const [adminAgencyId, setAdminAgencyId] = useState('')
@@ -413,6 +415,7 @@ export default function DashboardPage() {
       formData.append('experience_years', String(maidForm.experience_years))
       formData.append('expected_salary', maidForm.expected_salary)
       formData.append('languages', maidForm.languages)
+      formData.append('narrative', maidForm.narrative)
       formData.append('availability_status', maidForm.availability_status)
       if (photoFile) formData.append('photo', photoFile)
       if (videoFile) formData.append('video', videoFile)
@@ -427,6 +430,7 @@ export default function DashboardPage() {
         experience_years: 1,
         expected_salary: '',
         languages: 'Amharic,Arabic',
+        narrative: '',
         availability_status: 'AVAILABLE',
       })
 
@@ -468,6 +472,7 @@ export default function DashboardPage() {
       experience_years: Number(maid.experience_years || 0),
       expected_salary: maid.expected_salary || '',
       languages: maid.languages || '',
+      narrative: maid.narrative || '',
       availability_status: maid.availability_status || 'AVAILABLE',
     })
   }
@@ -857,6 +862,7 @@ export default function DashboardPage() {
                   <p>{maid.age} years • {maid.experience_years} years experience</p>
                   {maid.expected_salary && <p>Expected salary: {maid.expected_salary}</p>}
                   <p>{maid.languages}</p>
+                  {maid.narrative && <p className="muted">{maid.narrative}</p>}
                   <p className="muted meta-row">{formatRelativeDate(maid.last_updated_at || maid.UpdatedAt)}</p>
                   <p className="muted meta-row">Agency: {maid.agency_verified ? 'Verified' : 'Pending verification'}</p>
                   <span className="status-pill">{maid.availability_status}</span>
@@ -910,7 +916,7 @@ export default function DashboardPage() {
                         </button>
                         <a
                           className="icon-btn secondary"
-                          href={`${apiBase.replace(/\/api\/?$/, '')}/public/maids/${maid.ID}`}
+                          href={getMaidProfileLink(maid.ID)}
                           target="_blank"
                           rel="noreferrer"
                           aria-label={`Open public profile for ${maid.name}`}
@@ -940,6 +946,7 @@ export default function DashboardPage() {
                 <p><strong>Age:</strong> {displayedMaids[0].age}</p>
                 <p><strong>Experience:</strong> {displayedMaids[0].experience_years} years</p>
                 <p><strong>Languages:</strong> {displayedMaids[0].languages || '-'}</p>
+                <p><strong>Narrative:</strong> {displayedMaids[0].narrative || '-'}</p>
                 <p><strong>Expected salary:</strong> {displayedMaids[0].expected_salary || '-'}</p>
                 <p><strong>Availability:</strong> {displayedMaids[0].availability_status}</p>
                 <p><strong>Agency verified:</strong> {displayedMaids[0].agency_verified ? 'Yes' : 'No'}</p>
@@ -1005,6 +1012,8 @@ export default function DashboardPage() {
             <input id="maid-salary" placeholder="Expected salary (e.g. 2500 SAR / month)" value={maidForm.expected_salary} onChange={(e) => setMaidForm({ ...maidForm, expected_salary: e.target.value })} />
             <label htmlFor="maid-languages">Languages</label>
             <input id="maid-languages" placeholder="Languages (comma-separated)" value={maidForm.languages} onChange={(e) => setMaidForm({ ...maidForm, languages: e.target.value })} />
+            <label htmlFor="maid-narrative">Narrative</label>
+            <textarea id="maid-narrative" placeholder="Narrative about this maid profile" value={maidForm.narrative} onChange={(e) => setMaidForm({ ...maidForm, narrative: e.target.value })} rows={4} />
             <label htmlFor="maid-availability">Availability</label>
             <select id="maid-availability" value={maidForm.availability_status} onChange={(e) => setMaidForm({ ...maidForm, availability_status: e.target.value })}>
               <option value="AVAILABLE">AVAILABLE</option>
@@ -1041,6 +1050,7 @@ export default function DashboardPage() {
                       </select>
                       <input placeholder="Expected salary" value={editMaidForm.expected_salary} onChange={(e) => setEditMaidForm({ ...editMaidForm, expected_salary: e.target.value })} />
                       <input placeholder="Languages" value={editMaidForm.languages} onChange={(e) => setEditMaidForm({ ...editMaidForm, languages: e.target.value })} />
+                      <textarea placeholder="Narrative" value={editMaidForm.narrative} onChange={(e) => setEditMaidForm({ ...editMaidForm, narrative: e.target.value })} rows={3} />
                       <select value={editMaidForm.availability_status} onChange={(e) => setEditMaidForm({ ...editMaidForm, availability_status: e.target.value })}>
                         <option value="AVAILABLE">AVAILABLE</option>
                         <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>

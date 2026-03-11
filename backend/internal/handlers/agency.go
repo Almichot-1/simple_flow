@@ -36,6 +36,7 @@ type MaidRequest struct {
 	ExperienceYears    int    `json:"experience_years"`
 	ExpectedSalary     string `json:"expected_salary"`
 	Languages          string `json:"languages"`
+	Narrative          string `json:"narrative"`
 	AvailabilityStatus string `json:"availability_status" binding:"required,oneof=AVAILABLE NOT_AVAILABLE BOOKED"`
 	PhotoURL           string `json:"photo_url"`
 	IntroVideoURL      string `json:"intro_video_url"`
@@ -78,6 +79,7 @@ func (h *AgencyHandler) CreateMaid(c *gin.Context) {
 		ExperienceYears:    req.ExperienceYears,
 		ExpectedSalary:     req.ExpectedSalary,
 		Languages:          req.Languages,
+		Narrative:          req.Narrative,
 		AvailabilityStatus: req.AvailabilityStatus,
 		PhotoURL:           req.PhotoURL,
 		IntroVideoURL:      req.IntroVideoURL,
@@ -112,6 +114,7 @@ func (h *AgencyHandler) UpdateMaid(c *gin.Context) {
 	maid.ExperienceYears = req.ExperienceYears
 	maid.ExpectedSalary = req.ExpectedSalary
 	maid.Languages = req.Languages
+	maid.Narrative = req.Narrative
 	maid.AvailabilityStatus = req.AvailabilityStatus
 	if req.PhotoURL != "" {
 		maid.PhotoURL = req.PhotoURL
@@ -139,6 +142,7 @@ func parseMaidRequest(c *gin.Context) (MaidRequest, error) {
 			ExperienceYears:    experienceYears,
 			ExpectedSalary:     c.PostForm("expected_salary"),
 			Languages:          c.PostForm("languages"),
+			Narrative:          c.PostForm("narrative"),
 			AvailabilityStatus: availability,
 		}
 

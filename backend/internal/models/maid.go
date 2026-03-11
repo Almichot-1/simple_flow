@@ -17,6 +17,7 @@ type MaidProfile struct {
 	ExperienceYears    int           `json:"experience_years"`
 	ExpectedSalary     string        `json:"expected_salary"`
 	Languages          string        `json:"languages"`
+	Narrative          string        `json:"narrative"`
 	AvailabilityStatus string        `gorm:"default:AVAILABLE" json:"availability_status"`
 	PhotoURL           string        `json:"photo_url"`
 	IntroVideoURL      string        `json:"intro_video_url"`
