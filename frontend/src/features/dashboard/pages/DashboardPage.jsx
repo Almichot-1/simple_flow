@@ -232,21 +232,6 @@ export default function DashboardPage() {
   const showBrowseView = activeView === 'browse' || isAgency
   const showAgencyView = isAgency
 
-  useEffect(() => {
-    if (!isEmployer) return
-    setContactedAgencies(readStoredList(employerContactedKey))
-  }, [isEmployer, employerContactedKey])
-
-  useEffect(() => {
-    if (!isEmployer) return
-    setSavedProfiles(employerSavedQuery.data || [])
-  }, [isEmployer, employerSavedQuery.data])
-
-  useEffect(() => {
-    if (!isEmployer) return
-    setRecentViews(employerRecentQuery.data || [])
-  }, [isEmployer, employerRecentQuery.data])
-
   const routedMaidId = useMemo(() => {
     if (params.maidId && /^\d+$/.test(params.maidId)) {
       return Number(params.maidId)
@@ -316,6 +301,21 @@ export default function DashboardPage() {
     queryFn: () => apiRequest('/employer/recent', { token }),
     enabled: Boolean(token) && isEmployer,
   })
+
+  useEffect(() => {
+    if (!isEmployer) return
+    setContactedAgencies(readStoredList(employerContactedKey))
+  }, [isEmployer, employerContactedKey])
+
+  useEffect(() => {
+    if (!isEmployer) return
+    setSavedProfiles(employerSavedQuery.data || [])
+  }, [isEmployer, employerSavedQuery.data])
+
+  useEffect(() => {
+    if (!isEmployer) return
+    setRecentViews(employerRecentQuery.data || [])
+  }, [isEmployer, employerRecentQuery.data])
 
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
   const isWhatsappConfigured = normalizeDigits(agencyWhatsappPhone).length > 0
