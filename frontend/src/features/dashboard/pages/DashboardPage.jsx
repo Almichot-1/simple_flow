@@ -9,6 +9,7 @@ import {
   getMaidProfileLink,
   mediaUrl,
 } from '../../../shared/lib/helpers'
+import { subscribeToAdminNotifications } from '../../../shared/lib/firebase'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
 const EXPERIENCE_OPTIONS = [
@@ -24,6 +25,18 @@ const EXPERIENCE_OPTIONS = [
   { value: 9, label: '9 years' },
   { value: 10, label: '10+ years' },
 ]
+
+const AVAILABILITY_OPTIONS = [
+  { value: 'AVAILABLE', label: 'AVAILABLE' },
+  { value: 'ARRIVED', label: 'ARRIVED' },
+  { value: 'NOT_AVAILABLE', label: 'NOT_AVAILABLE' },
+  { value: 'BOOKED', label: 'BOOKED' },
+]
+
+function isOpenAvailabilityStatus(status) {
+  const value = String(status || '').toUpperCase()
+  return value === 'AVAILABLE' || value === 'ARRIVED'
+}
 
 const PAGE_SIZE_BROWSE = 9
 const PAGE_SIZE_TABLE = 10
@@ -60,9 +73,6 @@ function validateCreateMaidForm(form, photoFile) {
   const errors = {}
   if (!String(form.name || '').trim()) errors.name = 'Name is required.'
   if (Number(form.age) < 18) errors.age = 'Age must be 18 or above.'
-  if (!String(form.languages || '').trim()) errors.languages = 'At least one language is required.'
-  if (!String(form.expected_salary || '').trim()) errors.expected_salary = 'Expected salary is required.'
-  if (!photoFile) errors.photo = 'Profile photo is required.'
   return errors
 }
 
@@ -99,7 +109,7 @@ function getMaidCompleteness(maid) {
     Boolean(String(maid.expected_salary || '').trim()),
     Boolean(String(maid.photo_url || '').trim()),
     Boolean(String(maid.intro_video_url || '').trim()),
-    String(maid.availability_status || '').toUpperCase() === 'AVAILABLE',
+    isOpenAvailabilityStatus(maid.availability_status),
   ]
   const score = Math.round((checks.filter(Boolean).length / checks.length) * 100)
   return Math.max(0, Math.min(100, score))
@@ -111,13 +121,17 @@ function getMaidMissingFields(maid) {
   if (!String(maid.languages || '').trim()) missing.push('languages')
   if (!String(maid.photo_url || '').trim()) missing.push('photo')
   if (!String(maid.intro_video_url || '').trim()) missing.push('intro video')
-  if (String(maid.availability_status || '').toUpperCase() !== 'AVAILABLE') missing.push('availability not open')
+  if (!isOpenAvailabilityStatus(maid.availability_status)) missing.push('availability not open')
   return missing
 }
 
 function getAgencyProfileVisibility(maid) {
-  const isAvailable = String(maid.availability_status || '').toUpperCase() === 'AVAILABLE'
+  const isAvailable = isOpenAvailabilityStatus(maid.availability_status)
   const isComplete = getMaidMissingFields(maid).length === 0
+
+  if (String(maid.availability_status || '').toUpperCase() === 'ARRIVED') {
+    return { label: 'Arrived', className: 'status-arrived' }
+  }
 
   if (!isAvailable) {
     return { label: 'Hidden', className: 'status-hidden' }
@@ -158,6 +172,18 @@ function buildMaidDiscussionMessage(maid) {
   return `Hello, I am interested in ${maid.name} profile. Profile link: ${getMaidProfileLink(maid.ID)}`
 }
 
+function parseNotificationTimestamp(value) {
+  if (!value) return null
+  if (typeof value?.toDate === 'function') {
+    return value.toDate()
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return date
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -185,6 +211,7 @@ export default function DashboardPage() {
   const [editPhotoFile, setEditPhotoFile] = useState(null)
   const [editVideoFile, setEditVideoFile] = useState(null)
   const [editingMaidId, setEditingMaidId] = useState(null)
+  const [editingMaidPulseId, setEditingMaidPulseId] = useState(null)
   const [showAgencyForm, setShowAgencyForm] = useState(false)
   const [agencyProfileFilter, setAgencyProfileFilter] = useState('all')
   const [selectedAgencyMaidIds, setSelectedAgencyMaidIds] = useState([])
@@ -222,7 +249,9 @@ export default function DashboardPage() {
   const [pendingSort, setPendingSort] = useState({ key: 'created_at', direction: 'desc' })
   const [subscriptionSort, setSubscriptionSort] = useState({ key: 'ID', direction: 'desc' })
   const [visitsSort, setVisitsSort] = useState({ key: 'visits', direction: 'desc' })
+  const [adminNotifications, setAdminNotifications] = useState([])
   const lastQueryErrorRef = useRef('')
+  const latestAdminNotificationRef = useRef('')
 
   const isAgency = user?.role === 'AGENCY'
   const isAdmin = user?.role === 'ADMIN'
@@ -316,6 +345,48 @@ export default function DashboardPage() {
     if (!isEmployer) return
     setRecentViews(employerRecentQuery.data || [])
   }, [isEmployer, employerRecentQuery.data])
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setAdminNotifications([])
+      latestAdminNotificationRef.current = ''
+      return
+    }
+
+    let isMounted = true
+    let unsubscribe = () => {}
+
+    ;(async () => {
+      unsubscribe = await subscribeToAdminNotifications(
+        (rows) => {
+          if (!isMounted) return
+          setAdminNotifications(rows)
+
+          const newestId = rows[0]?.id || ''
+          if (!newestId) return
+
+          if (!latestAdminNotificationRef.current) {
+            latestAdminNotificationRef.current = newestId
+            return
+          }
+
+          if (newestId !== latestAdminNotificationRef.current) {
+            latestAdminNotificationRef.current = newestId
+            setMessage('New agency registration notification received.')
+          }
+        },
+        (subscribeError) => {
+          if (!isMounted) return
+          setError(subscribeError?.message || 'Failed to load admin notifications.')
+        },
+      )
+    })()
+
+    return () => {
+      isMounted = false
+      unsubscribe()
+    }
+  }, [isAdmin])
 
   const agencyWhatsappPhone = agencyWhatsappPhoneDraft || agencyContactQuery.data?.phone || ''
   const isWhatsappConfigured = normalizeDigits(agencyWhatsappPhone).length > 0
@@ -427,6 +498,11 @@ export default function DashboardPage() {
   }, [browsePageData.totalPages])
 
   const agencyMaids = useMemo(() => myMaidsQuery.data || [], [myMaidsQuery.data])
+  const editingMaid = useMemo(
+    () => agencyMaids.find((maid) => maid.ID === editingMaidId) || null,
+    [agencyMaids, editingMaidId],
+  )
+
   const filteredAgencyMaids = useMemo(() => {
     if (agencyProfileFilter === 'incomplete') {
       return agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0)
@@ -434,8 +510,11 @@ export default function DashboardPage() {
     if (agencyProfileFilter === 'missing-photo') {
       return agencyMaids.filter((maid) => !String(maid.photo_url || '').trim())
     }
+    if (agencyProfileFilter === 'arrived') {
+      return agencyMaids.filter((maid) => String(maid.availability_status || '').toUpperCase() === 'ARRIVED')
+    }
     if (agencyProfileFilter === 'hidden') {
-      return agencyMaids.filter((maid) => String(maid.availability_status || '').toUpperCase() !== 'AVAILABLE')
+      return agencyMaids.filter((maid) => !isOpenAvailabilityStatus(maid.availability_status))
     }
     return agencyMaids
   }, [agencyMaids, agencyProfileFilter])
@@ -507,7 +586,7 @@ export default function DashboardPage() {
         .filter((maid) => maid.agency_verified)
         .map((maid) => String(maid.agency_id || maid.AgencyID || maid.agency_phone || maid.ID)),
     )
-    const activeCandidates = maids.filter((maid) => String(maid.availability_status || '').toUpperCase() === 'AVAILABLE').length
+    const activeCandidates = maids.filter((maid) => isOpenAvailabilityStatus(maid.availability_status)).length
     return {
       verifiedAgencies: verifiedAgencyIds.size,
       activeCandidates,
@@ -610,12 +689,6 @@ export default function DashboardPage() {
     setMessage('')
     setError('')
 
-    if (!isWhatsappConfigured) {
-      setError('Set your WhatsApp number before creating profiles so employers can contact you.')
-      document.getElementById('agency-whatsapp-onboarding')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      return
-    }
-
     const validationErrors = validateCreateMaidForm(maidForm, photoFile)
     if (Object.keys(validationErrors).length > 0) {
       setError('Please fix the highlighted form fields before submitting.')
@@ -692,6 +765,7 @@ export default function DashboardPage() {
 
   function startEditMaid(maid) {
     setEditingMaidId(maid.ID)
+    setEditingMaidPulseId(maid.ID)
     setShowAgencyForm(true)
     setEditPhotoFile(null)
     setEditVideoFile(null)
@@ -704,10 +778,19 @@ export default function DashboardPage() {
       narrative: maid.narrative || '',
       availability_status: maid.availability_status || 'AVAILABLE',
     })
+
+    window.setTimeout(() => {
+      document.getElementById('agency-create-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+
+    window.setTimeout(() => {
+      setEditingMaidPulseId(null)
+    }, 1600)
   }
 
   function cancelEditMaid() {
     setEditingMaidId(null)
+    setEditingMaidPulseId(null)
     setEditPhotoFile(null)
     setEditVideoFile(null)
   }
@@ -800,6 +883,41 @@ export default function DashboardPage() {
       })))
       setSelectedAgencyMaidIds([])
       setMessage(`Updated ${selectedProfiles.length} profiles to ${nextStatus}.`)
+      queryClient.invalidateQueries({ queryKey: ['agency-maids', token] })
+      queryClient.invalidateQueries({ queryKey: ['maids'] })
+    } catch (err) {
+      if (err.message === 'Session expired. Please login again.') {
+        logout()
+        navigate('/login')
+        return
+      }
+      setError(err.message)
+    }
+  }
+
+  async function quickUpdateAvailability(maid, nextStatus) {
+    const currentStatus = String(maid.availability_status || '').toUpperCase()
+    if (currentStatus === nextStatus) return
+
+    setMessage('')
+    setError('')
+
+    try {
+      await apiRequest(`/agency/maids/${maid.ID}`, {
+        method: 'PUT',
+        token,
+        body: {
+          name: maid.name,
+          age: Number(maid.age),
+          experience_years: Number(maid.experience_years || 0),
+          expected_salary: maid.expected_salary || '',
+          languages: maid.languages || '',
+          narrative: maid.narrative || '',
+          availability_status: nextStatus,
+        },
+      })
+
+      setMessage(`${maid.name} status updated to ${nextStatus}.`)
       queryClient.invalidateQueries({ queryKey: ['agency-maids', token] })
       queryClient.invalidateQueries({ queryKey: ['maids'] })
     } catch (err) {
@@ -1231,6 +1349,7 @@ export default function DashboardPage() {
             <select value={filters.availability_status} onChange={(e) => setFilters({ ...filters, availability_status: e.target.value })}>
               <option value="">Any status</option>
               <option value="AVAILABLE">AVAILABLE</option>
+              <option value="ARRIVED">ARRIVED</option>
               <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
               <option value="BOOKED">BOOKED</option>
             </select>
@@ -1475,6 +1594,7 @@ export default function DashboardPage() {
               <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'all' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('all')}>All</button>
               <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'incomplete' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('incomplete')}>Incomplete</button>
               <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'missing-photo' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('missing-photo')}>Missing Photo</button>
+              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'arrived' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('arrived')}>Arrived</button>
               <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'hidden' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('hidden')}>Hidden</button>
             </div>
 
@@ -1488,6 +1608,7 @@ export default function DashboardPage() {
                 Select visible
               </label>
               <button className="btn secondary table-action-btn" type="button" onClick={() => bulkUpdateAvailability('BOOKED')}>Mark BOOKED</button>
+              <button className="btn secondary table-action-btn" type="button" onClick={() => bulkUpdateAvailability('ARRIVED')}>Mark ARRIVED</button>
               <button className="btn secondary table-action-btn" type="button" onClick={() => bulkUpdateAvailability('NOT_AVAILABLE')}>Mark NOT_AVAILABLE</button>
               <button className="btn danger table-action-btn" type="button" onClick={requestBulkDelete}>Delete Selected</button>
             </div>
@@ -1510,7 +1631,10 @@ export default function DashboardPage() {
                 const missing = getMaidMissingFields(maid)
                 const completeness = getMaidCompleteness(maid)
                 return (
-                  <article key={maid.ID} className="agency-profile-card">
+                  <article
+                    key={maid.ID}
+                    className={`agency-profile-card ${editingMaidId === maid.ID ? 'is-editing' : ''} ${editingMaidPulseId === maid.ID ? 'is-edit-pulse' : ''}`}
+                  >
                     <div className="agency-profile-media">
                       {maid.photo_url ? (
                         <img src={mediaUrl(maid.photo_url)} alt={`${maid.name} thumbnail`} className="media-photo" />
@@ -1541,6 +1665,19 @@ export default function DashboardPage() {
                       <div className="crud-actions">
                         <span className={`status-tag ${visibility.className}`}>{visibility.label}</span>
                         <span className="status-tag status-active">{maid.availability_status}</span>
+                        {editingMaidId === maid.ID && <span className="status-tag status-editing">Editing now</span>}
+                      </div>
+                      <div className="crud-actions inline-availability-row">
+                        <label htmlFor={`availability-${maid.ID}`}>Availability</label>
+                        <select
+                          id={`availability-${maid.ID}`}
+                          value={maid.availability_status || 'AVAILABLE'}
+                          onChange={(event) => quickUpdateAvailability(maid, event.target.value)}
+                        >
+                          {AVAILABILITY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
                       </div>
                       <div className="crud-actions">
                         <button className="btn secondary" type="button" onClick={() => startEditMaid(maid)}>Edit</button>
@@ -1556,13 +1693,18 @@ export default function DashboardPage() {
           </section>
 
           {showAgencyForm && (
-            <section className="card elevated" id="agency-create-section">
+            <section className={`card elevated agency-form-panel ${editingMaidId ? 'is-editing' : ''}`} id="agency-create-section">
               <div className="section-head">
                 <h2>{editingMaidId ? 'Edit Maid Profile' : 'Create Maid Profile'}</h2>
                 {editingMaidId && (
                   <button className="btn secondary" type="button" onClick={cancelEditMaid}>Cancel Edit</button>
                 )}
               </div>
+              {editingMaidId && editingMaid && (
+                <div className="edit-live-banner" role="status" aria-live="polite">
+                  <strong>Editing:</strong> {editingMaid.name} • {editingMaid.age} years • {editingMaid.availability_status}
+                </div>
+              )}
               <p className="muted">Upload real photo and optional intro video file (not URL).</p>
 
               <form onSubmit={editingMaidId ? (event) => {
@@ -1574,7 +1716,6 @@ export default function DashboardPage() {
                   id="maid-name"
                   className={!editingMaidId && maidFormErrors.name ? 'input-invalid' : ''}
                   placeholder="Name"
-                  required
                   value={editingMaidId ? editMaidForm.name : maidForm.name}
                   onChange={(e) => (editingMaidId
                     ? setEditMaidForm({ ...editMaidForm, name: e.target.value })
@@ -1587,7 +1728,6 @@ export default function DashboardPage() {
                   id="maid-age"
                   className={!editingMaidId && maidFormErrors.age ? 'input-invalid' : ''}
                   placeholder="Age"
-                  required
                   min={18}
                   type="number"
                   value={editingMaidId ? editMaidForm.age : maidForm.age}
@@ -1656,9 +1796,9 @@ export default function DashboardPage() {
                     ? setEditMaidForm({ ...editMaidForm, availability_status: e.target.value })
                     : setMaidForm({ ...maidForm, availability_status: e.target.value }))}
                 >
-                  <option value="AVAILABLE">AVAILABLE</option>
-                  <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
-                  <option value="BOOKED">BOOKED</option>
+                  {AVAILABILITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                 </select>
 
                 <label className="file-label">Photo</label>
@@ -1682,8 +1822,8 @@ export default function DashboardPage() {
                 />
 
                 <div className="crud-actions">
-                  <button className="btn" type="submit" disabled={!isWhatsappConfigured && !editingMaidId}>
-                    {editingMaidId ? 'Save Profile Changes' : 'Create Profile'}
+                  <button className="btn" type="submit">
+                    {editingMaidId ? 'Save & Publish Changes' : 'Create Profile'}
                   </button>
                   <button className="btn secondary" type="button" onClick={() => setShowAgencyForm(false)}>Close</button>
                 </div>
@@ -1704,6 +1844,31 @@ export default function DashboardPage() {
             <button className="btn secondary" onClick={onRefreshAdminData}>
               {subscriptionsQuery.isFetching || pendingAgenciesQuery.isFetching || activatedAgenciesQuery.isFetching || visitStatsQuery.isFetching ? 'Refreshing...' : 'Refresh Analytics'}
             </button>
+          </article>
+
+          <article className="card elevated admin-notification-panel">
+            <div className="section-head">
+              <h3>Agency Registration Notifications</h3>
+              <span className="status-tag status-live">{adminNotifications.length} events</span>
+            </div>
+            {adminNotifications.length === 0 ? (
+              <p className="muted">No registration notifications yet. New agency signups will appear here in real-time.</p>
+            ) : (
+              <ul className="list-clean admin-notification-list">
+                {adminNotifications.slice(0, 8).map((notification) => {
+                  const createdAt = parseNotificationTimestamp(notification.createdAt)
+                  return (
+                    <li key={notification.id}>
+                      <div>
+                        <strong>{notification.agencyEmail || 'Agency registration'}</strong>
+                        <p className="muted">{notification.country || '-'} • {notification.phone || '-'}</p>
+                      </div>
+                      <span className="muted">{createdAt ? formatRelativeDate(createdAt) : 'Just now'}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </article>
 
           <div className="admin-metric-grid">

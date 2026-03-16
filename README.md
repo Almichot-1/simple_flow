@@ -51,8 +51,8 @@ CLOUDINARY_VIDEO_FOLDER=maidshowcase/videos
 
 ## Default Admin
 
-- Email: `admin@maidshowcase.com`
-- Password: `Admin123!`
+- Email: `ahmedyasine230@gmail.com`
+- Password: `0501809476Ahmed@`
 
 Change these in `backend/.env` before production.
 

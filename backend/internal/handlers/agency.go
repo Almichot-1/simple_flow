@@ -38,7 +38,7 @@ type MaidRequest struct {
 	ExpectedSalary     string `json:"expected_salary"`
 	Languages          string `json:"languages"`
 	Narrative          string `json:"narrative"`
-	AvailabilityStatus string `json:"availability_status" binding:"required,oneof=AVAILABLE NOT_AVAILABLE BOOKED"`
+	AvailabilityStatus string `json:"availability_status" binding:"required,oneof=AVAILABLE ARRIVED NOT_AVAILABLE BOOKED"`
 	PhotoURL           string `json:"photo_url"`
 	IntroVideoURL      string `json:"intro_video_url"`
 }

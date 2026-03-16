@@ -4,6 +4,7 @@ import "gorm.io/gorm"
 
 const (
 	AvailAvailable    = "AVAILABLE"
+	AvailArrived      = "ARRIVED"
 	AvailNotAvailable = "NOT_AVAILABLE"
 	AvailBooked       = "BOOKED"
 )

@@ -61,8 +61,7 @@ func NewBrowseHandler(db *gorm.DB) *BrowseHandler {
 }
 
 func (h *BrowseHandler) ListMaids(c *gin.Context) {
-	query := h.db.Model(&models.MaidProfile{}).
-		Where("availability_status = ?", models.AvailAvailable)
+	query := h.db.Model(&models.MaidProfile{})
 
 	if c.GetString("role") == models.RoleAgency {
 		userID := c.GetUint("user_id")
@@ -72,6 +71,15 @@ func (h *BrowseHandler) ListMaids(c *gin.Context) {
 			return
 		}
 		query = query.Where("agency_id = ?", agency.ID)
+	} else {
+		query = query.Where("availability_status IN ?", []string{models.AvailAvailable, models.AvailArrived})
+	}
+
+	if status := strings.ToUpper(strings.TrimSpace(c.Query("availability_status"))); status != "" {
+		switch status {
+		case models.AvailAvailable, models.AvailArrived, models.AvailNotAvailable, models.AvailBooked:
+			query = query.Where("availability_status = ?", status)
+		}
 	}
 
 	if v := c.Query("age_min"); v != "" {

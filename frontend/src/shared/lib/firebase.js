@@ -7,6 +7,16 @@ import {
   createUserWithEmailAndPassword,
 } from 'firebase/auth'
 import { getAnalytics, isSupported } from 'firebase/analytics'
+import {
+  addDoc,
+  collection,
+  getFirestore,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+} from 'firebase/firestore'
 
 function env(name) {
   return String(import.meta.env[name] || '').trim()
@@ -41,6 +51,7 @@ export function getFirebaseRuntimeSummary() {
 let analyticsInstance = null
 let authInstance = null
 let googleProvider = null
+let firestoreInstance = null
 
 function hasRequiredFirebaseConfig() {
   return Boolean(
@@ -65,6 +76,9 @@ async function initFirebase() {
   }
   if (!googleProvider) {
     googleProvider = new GoogleAuthProvider()
+  }
+  if (!firestoreInstance) {
+    firestoreInstance = getFirestore(app)
   }
 
   if (typeof window !== 'undefined' && firebaseConfig.measurementId) {
@@ -103,3 +117,52 @@ export async function registerWithEmailFirebase(email, password) {
 
 export { initFirebase }
 export default initFirebase
+
+export async function publishAgencyRegistrationNotification(payload) {
+  const { app } = await initFirebase()
+  if (!app || !firestoreInstance) {
+    return false
+  }
+
+  const normalized = {
+    type: 'agency_registration',
+    agencyEmail: String(payload?.agencyEmail || '').trim().toLowerCase(),
+    country: String(payload?.country || '').trim(),
+    phone: String(payload?.phone || '').trim(),
+    source: String(payload?.source || 'web-register').trim(),
+    createdAt: serverTimestamp(),
+  }
+
+  if (!normalized.agencyEmail) {
+    return false
+  }
+
+  await addDoc(collection(firestoreInstance, 'admin_notifications'), normalized)
+  return true
+}
+
+export async function subscribeToAdminNotifications(onUpdate, onError, maxItems = 25) {
+  const { app } = await initFirebase()
+  if (!app || !firestoreInstance) {
+    return () => {}
+  }
+
+  const notificationsQuery = query(
+    collection(firestoreInstance, 'admin_notifications'),
+    orderBy('createdAt', 'desc'),
+    limit(maxItems),
+  )
+
+  return onSnapshot(
+    notificationsQuery,
+    (snapshot) => {
+      const rows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      onUpdate(rows)
+    },
+    (err) => {
+      if (typeof onError === 'function') {
+        onError(err)
+      }
+    },
+  )
+}

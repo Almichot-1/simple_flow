@@ -928,6 +928,11 @@ li {
   color: #166534;
 }
 
+.status-arrived {
+  background: #e0f2fe;
+  color: #075985;
+}
+
 .status-hidden {
   background: #fef3c7;
   color: #92400e;
@@ -990,6 +995,16 @@ li {
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.agency-profile-card.is-editing {
+  border-color: #175cd3;
+  box-shadow: 0 0 0 2px rgba(23, 92, 211, 0.2), 0 12px 24px rgba(30, 129, 176, 0.12);
+}
+
+.agency-profile-card.is-edit-pulse {
+  animation: edit-pulse 760ms ease-out;
 }
 
 .agency-profile-media {
@@ -999,6 +1014,69 @@ li {
 
 .agency-profile-body {
   padding: 0.75rem;
+}
+
+.inline-availability-row {
+  margin-top: 0.25rem;
+  align-items: center;
+}
+
+.inline-availability-row label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475467;
+}
+
+.inline-availability-row select {
+  width: auto;
+  min-width: 170px;
+  margin: 0;
+  padding: 0.3rem 0.55rem;
+  border-radius: 8px;
+  border-color: #d0d5dd;
+  background: #f9fafb;
+}
+
+.agency-form-panel {
+  animation: card-rise 280ms ease both;
+}
+
+.agency-form-panel.is-editing {
+  border-color: #bfd4f6;
+  box-shadow: 0 14px 28px rgba(23, 92, 211, 0.14);
+}
+
+.edit-live-banner {
+  margin: 0.2rem 0 0.7rem;
+  border: 1px solid #bfd4f6;
+  background: linear-gradient(90deg, #ecf3ff, #f8fbff);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  color: #12345a;
+  font-weight: 600;
+  animation: chip-pop 260ms ease both;
+}
+
+.status-editing {
+  background: #e6f4ff;
+  color: #0b60b2;
+}
+
+.admin-notification-panel {
+  margin-bottom: 0;
+}
+
+.admin-notification-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px dashed #d9e1ea;
+  padding: 0.55rem 0;
+}
+
+.admin-notification-list li:last-child {
+  border-bottom: 0;
 }
 
 .top-signout-btn {
@@ -1275,6 +1353,20 @@ li {
   }
 }
 
+@keyframes edit-pulse {
+  0% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 rgba(23, 92, 211, 0.15);
+  }
+  50% {
+    transform: translateY(-2px);
+    box-shadow: 0 0 0 8px rgba(23, 92, 211, 0);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero,
   .hero-trust-chips .trust-chip,
@@ -1283,6 +1375,11 @@ li {
   .live-dot.is-busy,
   .skeleton-block,
   .skeleton-line {
+    animation: none;
+  }
+
+  .agency-profile-card.is-edit-pulse,
+  .edit-live-banner {
     animation: none;
   }
 }

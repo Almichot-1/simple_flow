@@ -52,7 +52,23 @@ func EnsureDefaultAdmin(db *gorm.DB, email, password string) error {
 	var existing models.User
 	err := db.Where("email = ?", email).First(&existing).Error
 	if err == nil {
-		return nil
+		hash, hashErr := utils.HashPassword(password)
+		if hashErr != nil {
+			return hashErr
+		}
+
+		updates := map[string]any{
+			"password_hash": hash,
+			"role":          models.RoleAdmin,
+			"verified":      true,
+			"blocked":       false,
+			"banned":        false,
+		}
+		return db.Model(&models.User{}).Where("id = ?", existing.ID).Updates(updates).Error
+	}
+
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
 	}
 
 	hash, err := utils.HashPassword(password)
