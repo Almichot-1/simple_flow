@@ -1,6 +1,22 @@
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? 'https://simple-flow.onrender.com/api' : 'http://localhost:8080/api')
+const LOCAL_API = 'http://localhost:8080/api'
+const PROD_API = 'https://simple-flow.onrender.com/api'
+
+function resolveApiBase() {
+  const configured = String(import.meta.env.VITE_API_URL || '').trim()
+  const isDeployedHost = typeof window !== 'undefined' && !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname)
+  const configuredIsLocal = /localhost|127\.0\.0\.1/i.test(configured)
+
+  if (configured) {
+    if (isDeployedHost && configuredIsLocal) {
+      return PROD_API
+    }
+    return configured
+  }
+
+  return import.meta.env.PROD ? PROD_API : LOCAL_API
+}
+
+const API_BASE = resolveApiBase()
 
 export const apiBase = API_BASE
 export const apiOrigin = API_BASE.replace(/\/api\/?$/, '')
