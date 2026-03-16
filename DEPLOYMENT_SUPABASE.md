@@ -41,6 +41,10 @@ JWT_EXPIRY_MINS=60
 ADMIN_EMAIL=admin@maidshowcase.com
 ADMIN_PASSWORD=<strong-password>
 ALLOWED_ORIGINS=http://localhost:5173,https://<your-frontend-domain>
+CLOUDINARY_CLOUD_NAME=<your-cloudinary-cloud-name>
+CLOUDINARY_API_KEY=<your-cloudinary-api-key>
+CLOUDINARY_API_SECRET=<your-cloudinary-api-secret>
+CLOUDINARY_VIDEO_FOLDER=maidshowcase/videos
 ```
 
 ## Phase 3: First run against Supabase
@@ -84,14 +88,18 @@ This repo now includes `render.yaml` in project root.
   - `JWT_SECRET` = long random secret (64+ chars)
   - `ADMIN_PASSWORD` = strong production password
   - `ALLOWED_ORIGINS` = frontend origin(s), comma separated
+    - `CLOUDINARY_CLOUD_NAME` = Cloudinary cloud name
+    - `CLOUDINARY_API_KEY` = Cloudinary API key
+    - `CLOUDINARY_API_SECRET` = Cloudinary API secret
 5. Keep defaults from blueprint:
   - `JWT_EXPIRY_MINS=60`
   - `ADMIN_EMAIL=admin@maidshowcase.com` (change if needed)
+    - `CLOUDINARY_VIDEO_FOLDER=maidshowcase/videos` (optional)
 6. Deploy and verify `GET /health` returns `200`.
 
 Notes:
 - Render usually provides `PORT` automatically. Backend now accepts both `10000` and `:10000` formats.
-- Current uploads are local disk; data in `/uploads` is not durable across instance restarts.
+- Video uploads use Cloudinary when `CLOUDINARY_*` vars are configured; local disk `/uploads` can still be used for non-video fallbacks.
 
 ### Frontend deployment (Render static site)
 
@@ -122,6 +130,9 @@ Backend deploy env vars must include:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `ALLOWED_ORIGINS`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
 
 ## Phase 6: Post-deploy smoke tests
 

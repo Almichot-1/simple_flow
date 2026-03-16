@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"maidshowcase-api/internal/models"
+	"maidshowcase-api/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -182,6 +183,17 @@ func saveUploadedFile(c *gin.Context, field, prefix string) (string, error) {
 		if uploadedURL, uploadErr := uploadPhotoToImgBB(file); uploadErr == nil && uploadedURL != "" {
 			return uploadedURL, nil
 		}
+	}
+
+	if field == "video" {
+		uploadedURL, uploadErr := utils.UploadVideoToCloudinary(file)
+		if uploadErr != nil {
+			return "", fmt.Errorf("failed to upload video: %w", uploadErr)
+		}
+		if strings.TrimSpace(uploadedURL) == "" {
+			return "", fmt.Errorf("failed to upload video")
+		}
+		return uploadedURL, nil
 	}
 
 	if mkErr := os.MkdirAll("uploads", os.ModePerm); mkErr != nil {

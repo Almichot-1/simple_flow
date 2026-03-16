@@ -40,6 +40,15 @@ npm install
 npm run dev
 ```
 
+4. For agency video uploads, set Cloudinary variables in `backend/.env`:
+
+```env
+CLOUDINARY_CLOUD_NAME=<your-cloudinary-cloud-name>
+CLOUDINARY_API_KEY=<your-cloudinary-api-key>
+CLOUDINARY_API_SECRET=<your-cloudinary-api-secret>
+CLOUDINARY_VIDEO_FOLDER=maidshowcase/videos
+```
+
 ## Default Admin
 
 - Email: `admin@maidshowcase.com`
