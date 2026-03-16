@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strings"
@@ -41,6 +44,16 @@ type FirebaseLoginRequest struct {
 	Role    string `json:"role" binding:"omitempty,oneof=AGENCY EMPLOYER"`
 	Country string `json:"country"`
 	Phone   string `json:"phone"`
+}
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type ResetPasswordRequest struct {
+	Email        string `json:"email" binding:"required,email"`
+	RecoveryCode string `json:"recovery_code" binding:"required"`
+	NewPassword  string `json:"new_password" binding:"required,min=8"`
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -278,4 +291,124 @@ func (h *AuthHandler) DeleteMyAccount(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "account deleted"})
+}
+
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	recoveryCode, err := generateRecoveryCode(32)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare recovery code"})
+		return
+	}
+
+	var user models.User
+	err = h.db.Where("email = ?", email).First(&user).Error
+	if err == nil {
+		tokenHash := hashRecoveryCode(recoveryCode)
+		expiresAt := time.Now().Add(30 * time.Minute)
+
+		txErr := h.db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("user_id = ?", user.ID).Delete(&models.PasswordResetToken{}).Error; err != nil {
+				return err
+			}
+
+			entry := models.PasswordResetToken{
+				UserID:    user.ID,
+				TokenHash: tokenHash,
+				ExpiresAt: expiresAt,
+			}
+
+			if err := tx.Create(&entry).Error; err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if txErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create recovery code"})
+			return
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process recovery request"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       "If an account exists for this email, a recovery code has been generated.",
+		"recovery_code": recoveryCode,
+	})
+}
+
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !utils.ValidateStrongPassword(req.NewPassword) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "password must be at least 10 characters and include uppercase, lowercase, number, and symbol"})
+		return
+	}
+
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	var user models.User
+	if err := h.db.Where("email = ?", email).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired recovery code"})
+		return
+	}
+
+	tokenHash := hashRecoveryCode(req.RecoveryCode)
+	now := time.Now()
+
+	var resetToken models.PasswordResetToken
+	if err := h.db.Where("user_id = ? AND token_hash = ? AND used_at IS NULL AND expires_at > ?", user.ID, tokenHash, now).First(&resetToken).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired recovery code"})
+		return
+	}
+
+	newHash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.User{}).Where("id = ?", user.ID).Update("password_hash", newHash).Error; err != nil {
+			return err
+		}
+
+		usedAt := time.Now()
+		if err := tx.Model(&models.PasswordResetToken{}).Where("id = ?", resetToken.ID).Update("used_at", usedAt).Error; err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successful"})
+}
+
+func generateRecoveryCode(byteLen int) (string, error) {
+	b := make([]byte, byteLen)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func hashRecoveryCode(code string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(code)))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

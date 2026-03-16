@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { getFirebaseRuntimeSummary, signInWithGoogleFirebase } from '../../../shared/lib/firebase'
@@ -16,6 +16,13 @@ export default function LoginPage() {
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false)
 
   const maidPromptId = new URLSearchParams(location.search).get('maid')
+
+  useEffect(() => {
+    if (location.state?.message) {
+      setMessage(location.state.message)
+      navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+  }, [location.pathname, location.search, location.state, navigate])
 
   async function onSubmit(event) {
     event.preventDefault()
@@ -110,6 +117,7 @@ export default function LoginPage() {
               {isSubmitting ? 'Logging in...' : 'Login'}
             </button>
           </form>
+          <p className="muted auth-forgot-link"><Link to="/forgot-password">Forgot password?</Link></p>
 
           <div className="auth-divider"><span>or</span></div>
           <div className="auth-provider-buttons">

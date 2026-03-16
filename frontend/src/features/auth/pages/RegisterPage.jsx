@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
+import { publishAgencyRegistrationNotification } from '../../../shared/lib/firebase'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
 export default function RegisterPage() {
+  const navigate = useNavigate()
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -39,16 +42,26 @@ export default function RegisterPage() {
       await apiRequest('/register', { method: 'POST', body: payload })
 
       if (payload.role === 'AGENCY') {
-        setRegisterStatus({
-          steps: [
-            'Step 1: Account created',
-            'Step 2: Agency review pending',
-            'Step 3: You can login after admin approval',
-          ],
+        await publishAgencyRegistrationNotification({
+          agencyEmail: payload.email,
+          country: payload.country,
+          phone: payload.phone,
+          source: 'web-register',
+        }).catch(() => {
+          // Keep registration successful even if notifications are not writable.
         })
-        setMessage('Registration successful. Your agency is now in review.')
+
+        navigate('/login', {
+          replace: true,
+          state: {
+            message: 'Registration successful. Your agency is in review and can login after admin approval.',
+          },
+        })
       } else {
-        setMessage('Registration successful. You can login now.')
+        navigate('/login', {
+          replace: true,
+          state: { message: 'Registration successful. Please login.' },
+        })
       }
     } catch (err) {
       setError(err.message)

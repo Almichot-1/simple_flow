@@ -708,6 +708,10 @@ li {
   margin-top: 0.75rem;
 }
 
+.auth-forgot-link {
+  margin: 0.2rem 0 0.55rem;
+}
+
 .auth-switch a {
   color: #175cd3;
   font-weight: 600;
