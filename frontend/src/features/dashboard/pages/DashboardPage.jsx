@@ -238,6 +238,7 @@ export default function DashboardPage() {
   const [pendingDeleteMaid, setPendingDeleteMaid] = useState(null)
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [isSavingContact, setIsSavingContact] = useState(false)
+  const [isCreatingMaid, setIsCreatingMaid] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [browsePage, setBrowsePage] = useState(1)
   const [activatedPage, setActivatedPage] = useState(1)
@@ -686,6 +687,8 @@ export default function DashboardPage() {
 
   async function createMaid(event) {
     event.preventDefault()
+    if (isCreatingMaid) return
+
     setMessage('')
     setError('')
 
@@ -694,6 +697,8 @@ export default function DashboardPage() {
       setError('Please fix the highlighted form fields before submitting.')
       return
     }
+
+    setIsCreatingMaid(true)
     try {
       const formData = new FormData()
       formData.append('name', maidForm.name)
@@ -728,6 +733,8 @@ export default function DashboardPage() {
         return
       }
       setError(err.message)
+    } finally {
+      setIsCreatingMaid(false)
     }
   }
 
@@ -1822,8 +1829,8 @@ export default function DashboardPage() {
                 />
 
                 <div className="crud-actions">
-                  <button className="btn" type="submit">
-                    {editingMaidId ? 'Save & Publish Changes' : 'Create Profile'}
+                  <button className="btn" type="submit" disabled={!editingMaidId && isCreatingMaid}>
+                    {editingMaidId ? 'Save & Publish Changes' : (isCreatingMaid ? 'Adding maid...' : 'Create Profile')}
                   </button>
                   <button className="btn secondary" type="button" onClick={() => setShowAgencyForm(false)}>Close</button>
                 </div>
