@@ -100,6 +100,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create agency profile"})
 			return
 		}
+
+		notification := models.AgencyNotification{
+			Type:        models.NotificationTypeAgencyRegistration,
+			AgencyID:    agency.ID,
+			UserID:      user.ID,
+			AgencyEmail: user.Email,
+			Country:     agency.Country,
+			Phone:       agency.Phone,
+			Source:      "web-register",
+		}
+		if err := h.db.Create(&notification).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create agency notification"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "registration successful"})

@@ -83,6 +83,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 			admin.PATCH("/agencies/:id/unban", adminHandler.UnbanAgency)
 			admin.GET("/subscriptions", adminHandler.ListAllSubscriptions)
 			admin.GET("/visit-stats", adminHandler.VisitStats)
+			admin.GET("/notifications/summary", adminHandler.NotificationSummary)
 			admin.PATCH("/subscriptions/:id/activate", adminHandler.ActivateSubscription)
 		}
 	}

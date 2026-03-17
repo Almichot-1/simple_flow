@@ -42,6 +42,18 @@ type ActivatedAgencyRow struct {
 	CreatedAt           time.Time  `json:"created_at"`
 }
 
+type AdminNotificationRow struct {
+	ID          uint      `json:"id"`
+	Type        string    `json:"type"`
+	AgencyID    uint      `json:"agency_id"`
+	UserID      uint      `json:"user_id"`
+	AgencyEmail string    `json:"agency_email"`
+	Country     string    `json:"country"`
+	Phone       string    `json:"phone"`
+	Source      string    `json:"source"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 func NewAdminHandler(db *gorm.DB) *AdminHandler {
 	return &AdminHandler{db: db}
 }
@@ -291,5 +303,33 @@ func (h *AdminHandler) VisitStats(c *gin.Context) {
 		"unique_agencies_visited":  uniqueAgencies,
 		"last_24h_visits":          last24hVisits,
 		"top_employers":            topEmployers,
+	})
+}
+
+func (h *AdminHandler) NotificationSummary(c *gin.Context) {
+	var total int64
+	if err := h.db.Model(&models.AgencyNotification{}).
+		Where("type = ?", models.NotificationTypeAgencyRegistration).
+		Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load notification count"})
+		return
+	}
+
+	items := make([]AdminNotificationRow, 0)
+	if err := h.db.Model(&models.AgencyNotification{}).
+		Select("id, type, agency_id, user_id, agency_email, country, phone, source, created_at").
+		Where("type = ?", models.NotificationTypeAgencyRegistration).
+		Order("created_at desc").
+		Limit(10).
+		Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load notifications"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":             total,
+		"latest":            items,
+		"latest_limit":      10,
+		"notification_type": models.NotificationTypeAgencyRegistration,
 	})
 }
