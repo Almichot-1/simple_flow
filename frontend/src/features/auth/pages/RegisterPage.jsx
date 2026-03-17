@@ -6,30 +6,30 @@ import { publishAgencyRegistrationNotification } from '../../../shared/lib/fireb
 import brandLogo from '../../../assets/simflow-logo.svg'
 
 function validateRegistrationForm(form, isStrongPassword) {
-  const reasons = []
+  const errors = {}
   const email = String(form.email || '').trim()
   const password = String(form.password || '')
   const country = String(form.country || '').trim()
   const phone = String(form.phone || '').trim()
 
   if (!email) {
-    reasons.push('Email is required.')
+    errors.email = 'Email is required.'
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    reasons.push('Please enter a valid email address.')
+    errors.email = 'Please enter a valid email address.'
   }
 
   if (!password) {
-    reasons.push('Password is required.')
+    errors.password = 'Password is required.'
   } else if (!isStrongPassword) {
-    reasons.push('Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.')
+    errors.password = 'Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.'
   }
 
   if (form.role === 'AGENCY') {
-    if (!country) reasons.push('Country is required for agency accounts.')
-    if (!phone) reasons.push('Phone is required for agency accounts.')
+    if (!country) errors.country = 'Country is required for agency accounts.'
+    if (!phone) errors.phone = 'Phone is required for agency accounts.'
   }
 
-  return reasons
+  return errors
 }
 
 export default function RegisterPage() {
@@ -46,6 +46,8 @@ export default function RegisterPage() {
   const [registerStatus, setRegisterStatus] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [didSubmit, setDidSubmit] = useState(false)
 
   const isStrongPassword =
     form.password.length >= 10 &&
@@ -59,10 +61,11 @@ export default function RegisterPage() {
     setMessage('')
     setError('')
     setRegisterStatus(null)
+    setDidSubmit(true)
 
-    const reasons = validateRegistrationForm(form, isStrongPassword)
-    if (reasons.length > 0) {
-      setError(reasons.join(' '))
+    const nextErrors = validateRegistrationForm(form, isStrongPassword)
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
       return
     }
 
@@ -74,6 +77,8 @@ export default function RegisterPage() {
         payload.phone = ''
       }
       await apiRequest('/register', { method: 'POST', body: payload })
+      setFieldErrors({})
+      setDidSubmit(false)
 
       if (payload.role === 'AGENCY') {
         await publishAgencyRegistrationNotification({
@@ -139,25 +144,51 @@ export default function RegisterPage() {
             <input
               id="register-email"
               type="email"
+              className={fieldErrors.email ? 'input-invalid' : ''}
               placeholder="Email"
               autoComplete="email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => {
+                const nextForm = { ...form, email: e.target.value }
+                setForm(nextForm)
+                if (didSubmit) {
+                  setFieldErrors(validateRegistrationForm(nextForm, isStrongPassword))
+                }
+              }}
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? 'register-email-error' : undefined}
             />
+            {fieldErrors.email && <p id="register-email-error" className="field-error">{fieldErrors.email}</p>}
             <label htmlFor="register-password">Password</label>
             <div className="password-row">
               <input
                 id="register-password"
                 type={showPassword ? 'text' : 'password'}
+                className={fieldErrors.password ? 'input-invalid' : ''}
                 placeholder="Password"
                 autoComplete="new-password"
                 value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                onChange={(e) => {
+                  const nextForm = { ...form, password: e.target.value }
+                  setForm(nextForm)
+                  if (didSubmit) {
+                    const nextStrong =
+                      nextForm.password.length >= 10 &&
+                      /[A-Z]/.test(nextForm.password) &&
+                      /[a-z]/.test(nextForm.password) &&
+                      /\d/.test(nextForm.password) &&
+                      /[^A-Za-z0-9]/.test(nextForm.password)
+                    setFieldErrors(validateRegistrationForm(nextForm, nextStrong))
+                  }
+                }}
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? 'register-password-error' : undefined}
               />
               <button className="btn secondary password-toggle" type="button" onClick={() => setShowPassword((prev) => !prev)}>
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
+            {fieldErrors.password && <p id="register-password-error" className="field-error">{fieldErrors.password}</p>}
             <p className={`muted ${isStrongPassword ? 'ok' : ''}`}>
               Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.
             </p>
@@ -172,17 +203,37 @@ export default function RegisterPage() {
                 <label htmlFor="register-country">Country</label>
                 <input
                   id="register-country"
+                  className={fieldErrors.country ? 'input-invalid' : ''}
                   placeholder="Country"
                   value={form.country}
-                  onChange={(e) => setForm({ ...form, country: e.target.value })}
+                  onChange={(e) => {
+                    const nextForm = { ...form, country: e.target.value }
+                    setForm(nextForm)
+                    if (didSubmit) {
+                      setFieldErrors(validateRegistrationForm(nextForm, isStrongPassword))
+                    }
+                  }}
+                  aria-invalid={Boolean(fieldErrors.country)}
+                  aria-describedby={fieldErrors.country ? 'register-country-error' : undefined}
                 />
+                {fieldErrors.country && <p id="register-country-error" className="field-error">{fieldErrors.country}</p>}
                 <label htmlFor="register-phone">Phone</label>
                 <input
                   id="register-phone"
+                  className={fieldErrors.phone ? 'input-invalid' : ''}
                   placeholder="Phone"
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  onChange={(e) => {
+                    const nextForm = { ...form, phone: e.target.value }
+                    setForm(nextForm)
+                    if (didSubmit) {
+                      setFieldErrors(validateRegistrationForm(nextForm, isStrongPassword))
+                    }
+                  }}
+                  aria-invalid={Boolean(fieldErrors.phone)}
+                  aria-describedby={fieldErrors.phone ? 'register-phone-error' : undefined}
                 />
+                {fieldErrors.phone && <p id="register-phone-error" className="field-error">{fieldErrors.phone}</p>}
               </>
             )}
             <button className="btn" type="submit" disabled={isSubmitting}>

@@ -82,7 +82,6 @@ export default function ForgotPasswordPage() {
     const nextErrors = validateRecoveryRequestEmail(email)
     setRequestErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
-      setError('Please fix the highlighted fields.')
       return
     }
 
@@ -108,7 +107,6 @@ export default function ForgotPasswordPage() {
     const nextErrors = validateResetForm({ newPassword, confirmPassword, isStrongPassword, passwordsMatch })
     setResetErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
-      setError('Please fix the highlighted fields.')
       return
     }
 
