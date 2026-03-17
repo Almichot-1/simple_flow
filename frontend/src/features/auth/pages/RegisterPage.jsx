@@ -5,6 +5,33 @@ import { apiRequest } from '../../../shared/api/client'
 import { publishAgencyRegistrationNotification } from '../../../shared/lib/firebase'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
+function validateRegistrationForm(form, isStrongPassword) {
+  const reasons = []
+  const email = String(form.email || '').trim()
+  const password = String(form.password || '')
+  const country = String(form.country || '').trim()
+  const phone = String(form.phone || '').trim()
+
+  if (!email) {
+    reasons.push('Email is required.')
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    reasons.push('Please enter a valid email address.')
+  }
+
+  if (!password) {
+    reasons.push('Password is required.')
+  } else if (!isStrongPassword) {
+    reasons.push('Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.')
+  }
+
+  if (form.role === 'AGENCY') {
+    if (!country) reasons.push('Country is required for agency accounts.')
+    if (!phone) reasons.push('Phone is required for agency accounts.')
+  }
+
+  return reasons
+}
+
 export default function RegisterPage() {
   const navigate = useNavigate()
   const [form, setForm] = useState({
@@ -32,6 +59,13 @@ export default function RegisterPage() {
     setMessage('')
     setError('')
     setRegisterStatus(null)
+
+    const reasons = validateRegistrationForm(form, isStrongPassword)
+    if (reasons.length > 0) {
+      setError(reasons.join(' '))
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const payload = { ...form }
@@ -100,14 +134,13 @@ export default function RegisterPage() {
             </section>
           )}
 
-          <form onSubmit={onSubmit}>
+          <form onSubmit={onSubmit} noValidate>
             <label htmlFor="register-email">Email</label>
             <input
               id="register-email"
               type="email"
               placeholder="Email"
               autoComplete="email"
-              required
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -118,8 +151,6 @@ export default function RegisterPage() {
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
                 autoComplete="new-password"
-                minLength={10}
-                required
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
@@ -142,7 +173,6 @@ export default function RegisterPage() {
                 <input
                   id="register-country"
                   placeholder="Country"
-                  required
                   value={form.country}
                   onChange={(e) => setForm({ ...form, country: e.target.value })}
                 />
@@ -150,13 +180,12 @@ export default function RegisterPage() {
                 <input
                   id="register-phone"
                   placeholder="Phone"
-                  required
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />
               </>
             )}
-            <button className="btn" type="submit" disabled={isSubmitting || !isStrongPassword}>
+            <button className="btn" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Creating account...' : 'Register'}
             </button>
           </form>
