@@ -1261,7 +1261,6 @@ export default function DashboardPage() {
         {toasts.map((toast) => (
           <article key={toast.id} className={`toast-item ${toast.type === 'err' ? 'err' : 'ok'}`}>
             <span>{toast.text}</span>
-            <button className="toast-close" type="button" onClick={() => setToasts((prev) => prev.filter((entry) => entry.id !== toast.id))}>Dismiss</button>
           </article>
         ))}
       </section>
