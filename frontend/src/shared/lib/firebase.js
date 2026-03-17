@@ -13,9 +13,9 @@ import { getAnalytics, isSupported } from 'firebase/analytics'
 import {
   addDoc,
   collection,
+  getDocs,
   getFirestore,
   limit,
-  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -34,6 +34,8 @@ const firebaseConfig = {
   appId: env('VITE_FIREBASE_APP_ID'),
   measurementId: env('VITE_FIREBASE_MEASUREMENT_ID'),
 }
+
+const firestoreDatabaseId = env('VITE_FIREBASE_DATABASE_ID') || '(default)'
 
 function maskApiKey(apiKey) {
   const value = String(apiKey || '')
@@ -81,7 +83,7 @@ async function initFirebase() {
     googleProvider = new GoogleAuthProvider()
   }
   if (!firestoreInstance) {
-    firestoreInstance = getFirestore(app)
+    firestoreInstance = getFirestore(app, firestoreDatabaseId)
   }
 
   if (typeof window !== 'undefined' && firebaseConfig.measurementId) {
@@ -184,16 +186,26 @@ export async function subscribeToAdminNotifications(onUpdate, onError, maxItems 
     limit(maxItems),
   )
 
-  return onSnapshot(
-    notificationsQuery,
-    (snapshot) => {
+  let disposed = false
+
+  const loadNotifications = async () => {
+    if (disposed) return
+    try {
+      const snapshot = await getDocs(notificationsQuery)
       const rows = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
       onUpdate(rows)
-    },
-    (err) => {
+    } catch (err) {
       if (typeof onError === 'function') {
         onError(err)
       }
-    },
-  )
+    }
+  }
+
+  await loadNotifications()
+  const timer = setInterval(loadNotifications, 15000)
+
+  return () => {
+    disposed = true
+    clearInterval(timer)
+  }
 }
