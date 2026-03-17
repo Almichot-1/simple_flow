@@ -1,12 +1,16 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { apiRequest } from '../../../shared/api/client'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import {
+  confirmPasswordResetFirebase,
+  sendPasswordResetEmailFirebase,
+  verifyPasswordResetCodeFirebase,
+} from '../../../shared/lib/firebase'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
-  const [recoveryCode, setRecoveryCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -15,6 +19,15 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('')
   const [isRequesting, setIsRequesting] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false)
+
+  const resetCode = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const mode = params.get('mode')
+    const oobCode = params.get('oobCode')
+    if (mode !== 'resetPassword') return ''
+    return String(oobCode || '').trim()
+  }, [location.search])
 
   const isStrongPassword =
     newPassword.length >= 10 &&
@@ -31,14 +44,8 @@ export default function ForgotPasswordPage() {
     setError('')
     setIsRequesting(true)
     try {
-      const data = await apiRequest('/forgot-password', {
-        method: 'POST',
-        body: { email: String(email).trim().toLowerCase() },
-      })
-      if (data?.recovery_code) {
-        setRecoveryCode(data.recovery_code)
-      }
-      setMessage('Recovery code generated. Use it below to set a new password.')
+      await sendPasswordResetEmailFirebase(email)
+      setMessage('Reset link sent. Please check your email and open the link to continue.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -58,14 +65,7 @@ export default function ForgotPasswordPage() {
 
     setIsResetting(true)
     try {
-      await apiRequest('/reset-password', {
-        method: 'POST',
-        body: {
-          email: String(email).trim().toLowerCase(),
-          recovery_code: String(recoveryCode).trim(),
-          new_password: newPassword,
-        },
-      })
+      await confirmPasswordResetFirebase(resetCode, newPassword)
       navigate('/login', {
         replace: true,
         state: { message: 'Password reset successful. Please login with your new password.' },
@@ -77,6 +77,34 @@ export default function ForgotPasswordPage() {
     }
   }
 
+  useEffect(() => {
+    if (!resetCode) return
+
+    let active = true
+    setIsVerifyingCode(true)
+    setError('')
+    setMessage('')
+
+    verifyPasswordResetCodeFirebase(resetCode)
+      .then((resolvedEmail) => {
+        if (!active) return
+        setEmail(String(resolvedEmail || '').trim().toLowerCase())
+        setMessage('Reset link verified. Set your new password below.')
+      })
+      .catch((err) => {
+        if (!active) return
+        setError(err.message || 'This reset link is invalid or expired. Please request a new one.')
+      })
+      .finally(() => {
+        if (!active) return
+        setIsVerifyingCode(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [resetCode])
+
   return (
     <main className="app auth-page">
       <header className="hero">
@@ -87,7 +115,7 @@ export default function ForgotPasswordPage() {
             <h1>Account Recovery</h1>
           </div>
         </div>
-        <p>Recover your account by requesting a recovery code, then setting a new password.</p>
+        <p>Recover your account with a secure Firebase reset link sent to your email.</p>
       </header>
 
       <section className="grid two auth-grid">
@@ -106,66 +134,72 @@ export default function ForgotPasswordPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={Boolean(resetCode)}
             />
             <button className="btn" type="submit" disabled={isRequesting || isResetting}>
-              {isRequesting ? 'Generating code...' : 'Get Recovery Code'}
+              {isRequesting ? 'Sending reset link...' : 'Send Reset Link'}
             </button>
           </form>
 
-          <form onSubmit={onResetPassword}>
-            <label htmlFor="recover-code">Recovery Code</label>
-            <input
-              id="recover-code"
-              type="text"
-              placeholder="Recovery code"
-              required
-              value={recoveryCode}
-              onChange={(event) => setRecoveryCode(event.target.value)}
-            />
-
-            <label htmlFor="recover-new-password">New Password</label>
-            <div className="password-row">
+          {resetCode && (
+            <form onSubmit={onResetPassword}>
+              <label htmlFor="recover-email-verified">Account Email</label>
               <input
-                id="recover-new-password"
-                type={showNewPassword ? 'text' : 'password'}
-                placeholder="New password"
-                autoComplete="new-password"
-                minLength={10}
-                required
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
+                id="recover-email-verified"
+                type="email"
+                value={email}
+                readOnly
+                disabled
               />
-              <button className="btn secondary password-toggle" type="button" onClick={() => setShowNewPassword((prev) => !prev)}>
-                {showNewPassword ? 'Hide' : 'Show'}
+
+              <label htmlFor="recover-new-password">New Password</label>
+              <div className="password-row">
+                <input
+                  id="recover-new-password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="New password"
+                  autoComplete="new-password"
+                  minLength={10}
+                  required
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+                <button className="btn secondary password-toggle" type="button" onClick={() => setShowNewPassword((prev) => !prev)}>
+                  {showNewPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+
+              <label htmlFor="recover-confirm-password">Confirm Password</label>
+              <div className="password-row">
+                <input
+                  id="recover-confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirm new password"
+                  autoComplete="new-password"
+                  minLength={10}
+                  required
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+                <button className="btn secondary password-toggle" type="button" onClick={() => setShowConfirmPassword((prev) => !prev)}>
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+
+              <p className={`muted ${isStrongPassword ? 'ok' : ''}`}>
+                Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.
+              </p>
+              {!passwordsMatch && confirmPassword ? <p className="muted err">Passwords do not match.</p> : null}
+
+              <button
+                className="btn"
+                type="submit"
+                disabled={isRequesting || isResetting || isVerifyingCode || !isStrongPassword || !passwordsMatch}
+              >
+                {isResetting ? 'Resetting password...' : isVerifyingCode ? 'Verifying link...' : 'Reset Password'}
               </button>
-            </div>
-
-            <label htmlFor="recover-confirm-password">Confirm Password</label>
-            <div className="password-row">
-              <input
-                id="recover-confirm-password"
-                type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="Confirm new password"
-                autoComplete="new-password"
-                minLength={10}
-                required
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-              <button className="btn secondary password-toggle" type="button" onClick={() => setShowConfirmPassword((prev) => !prev)}>
-                {showConfirmPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-
-            <p className={`muted ${isStrongPassword ? 'ok' : ''}`}>
-              Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.
-            </p>
-            {!passwordsMatch && confirmPassword ? <p className="muted err">Passwords do not match.</p> : null}
-
-            <button className="btn" type="submit" disabled={isRequesting || isResetting || !isStrongPassword || !passwordsMatch}>
-              {isResetting ? 'Resetting password...' : 'Reset Password'}
-            </button>
-          </form>
+            </form>
+          )}
 
           <p className="muted auth-switch">Remembered your password? <Link to="/login">Back to login</Link></p>
         </article>

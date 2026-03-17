@@ -301,15 +301,19 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	email := strings.ToLower(strings.TrimSpace(req.Email))
-	recoveryCode, err := generateRecoveryCode(32)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare recovery code"})
-		return
+	response := gin.H{
+		"message": "If an account exists for this email, a recovery code has been generated.",
 	}
 
 	var user models.User
-	err = h.db.Where("email = ?", email).First(&user).Error
+	err := h.db.Where("email = ?", email).First(&user).Error
 	if err == nil {
+		recoveryCode, codeErr := generateRecoveryCode(32)
+		if codeErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare recovery code"})
+			return
+		}
+
 		tokenHash := hashRecoveryCode(recoveryCode)
 		expiresAt := time.Now().Add(30 * time.Minute)
 
@@ -335,15 +339,14 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create recovery code"})
 			return
 		}
+
+		response["recovery_code"] = recoveryCode
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process recovery request"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message":       "If an account exists for this email, a recovery code has been generated.",
-		"recovery_code": recoveryCode,
-	})
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *AuthHandler) ResetPassword(c *gin.Context) {

@@ -1,9 +1,12 @@
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import {
   GoogleAuthProvider,
+  confirmPasswordReset,
   getAuth,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  verifyPasswordResetCode,
   createUserWithEmailAndPassword,
 } from 'firebase/auth'
 import { getAnalytics, isSupported } from 'firebase/analytics'
@@ -113,6 +116,34 @@ export async function registerWithEmailFirebase(email, password) {
     throw new Error('Firebase is not configured.')
   }
   return createUserWithEmailAndPassword(auth, String(email || '').trim(), String(password || ''))
+}
+
+export async function sendPasswordResetEmailFirebase(email) {
+  const { auth } = await initFirebase()
+  if (!auth) {
+    throw new Error('Firebase is not configured.')
+  }
+
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/forgot-password` : undefined
+  const actionCodeSettings = redirectUrl ? { url: redirectUrl, handleCodeInApp: true } : undefined
+  return sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings)
+}
+
+export async function verifyPasswordResetCodeFirebase(code) {
+  const { auth } = await initFirebase()
+  if (!auth) {
+    throw new Error('Firebase is not configured.')
+  }
+  return verifyPasswordResetCode(auth, String(code || '').trim())
+}
+
+export async function confirmPasswordResetFirebase(code, newPassword) {
+  const { auth } = await initFirebase()
+  if (!auth) {
+    throw new Error('Firebase is not configured.')
+  }
+  return confirmPasswordReset(auth, String(code || '').trim(), String(newPassword || ''))
 }
 
 export { initFirebase }

@@ -73,6 +73,7 @@ function validateCreateMaidForm(form, photoFile) {
   const errors = {}
   if (!String(form.name || '').trim()) errors.name = 'Name is required.'
   if (Number(form.age) < 18) errors.age = 'Age must be 18 or above.'
+  if (!photoFile) errors.photo = 'Profile photo is required.'
   return errors
 }
 
