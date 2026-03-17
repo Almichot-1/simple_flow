@@ -7,6 +7,37 @@ import {
 } from '../../../shared/lib/firebase'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
+function validateRecoveryRequestEmail(email) {
+  const reasons = []
+  const value = String(email || '').trim()
+
+  if (!value) {
+    reasons.push('Email is required.')
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    reasons.push('Please enter a valid email address.')
+  }
+
+  return reasons
+}
+
+function validateResetForm({ newPassword, confirmPassword, isStrongPassword, passwordsMatch }) {
+  const reasons = []
+
+  if (!String(newPassword || '')) {
+    reasons.push('New password is required.')
+  } else if (!isStrongPassword) {
+    reasons.push('Password must be at least 10 characters and include uppercase, lowercase, number, and symbol.')
+  }
+
+  if (!String(confirmPassword || '')) {
+    reasons.push('Confirm password is required.')
+  } else if (!passwordsMatch) {
+    reasons.push('Passwords do not match.')
+  }
+
+  return reasons
+}
+
 export default function ForgotPasswordPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -42,12 +73,19 @@ export default function ForgotPasswordPage() {
     event.preventDefault()
     setMessage('')
     setError('')
+
+    const reasons = validateRecoveryRequestEmail(email)
+    if (reasons.length > 0) {
+      setError(reasons.join(' '))
+      return
+    }
+
     setIsRequesting(true)
     try {
       await sendPasswordResetEmailFirebase(email)
       setMessage('Reset link sent. Please check your email and open the link to continue.')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to start password reset.')
     } finally {
       setIsRequesting(false)
     }
@@ -58,14 +96,16 @@ export default function ForgotPasswordPage() {
     setMessage('')
     setError('')
 
-    if (!passwordsMatch) {
-      setError('Passwords do not match.')
+    const reasons = validateResetForm({ newPassword, confirmPassword, isStrongPassword, passwordsMatch })
+    if (reasons.length > 0) {
+      setError(reasons.join(' '))
       return
     }
 
     setIsResetting(true)
     try {
       await confirmPasswordResetFirebase(resetCode, newPassword)
+
       navigate('/login', {
         replace: true,
         state: { message: 'Password reset successful. Please login with your new password.' },
@@ -124,14 +164,13 @@ export default function ForgotPasswordPage() {
           {message && <p className="banner ok" role="status" aria-live="polite">{message}</p>}
           {error && <p className="banner err" role="alert" aria-live="assertive">{error}</p>}
 
-          <form onSubmit={onRequestRecoveryCode}>
+          <form onSubmit={onRequestRecoveryCode} noValidate>
             <label htmlFor="recover-email">Email</label>
             <input
               id="recover-email"
               type="email"
               placeholder="Email"
               autoComplete="email"
-              required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               disabled={Boolean(resetCode)}
@@ -142,7 +181,7 @@ export default function ForgotPasswordPage() {
           </form>
 
           {resetCode && (
-            <form onSubmit={onResetPassword}>
+            <form onSubmit={onResetPassword} noValidate>
               <label htmlFor="recover-email-verified">Account Email</label>
               <input
                 id="recover-email-verified"
@@ -159,8 +198,6 @@ export default function ForgotPasswordPage() {
                   type={showNewPassword ? 'text' : 'password'}
                   placeholder="New password"
                   autoComplete="new-password"
-                  minLength={10}
-                  required
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                 />
@@ -176,8 +213,6 @@ export default function ForgotPasswordPage() {
                   type={showConfirmPassword ? 'text' : 'password'}
                   placeholder="Confirm new password"
                   autoComplete="new-password"
-                  minLength={10}
-                  required
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                 />
@@ -194,7 +229,7 @@ export default function ForgotPasswordPage() {
               <button
                 className="btn"
                 type="submit"
-                disabled={isRequesting || isResetting || isVerifyingCode || !isStrongPassword || !passwordsMatch}
+                disabled={isRequesting || isResetting || isVerifyingCode}
               >
                 {isResetting ? 'Resetting password...' : isVerifyingCode ? 'Verifying link...' : 'Reset Password'}
               </button>
