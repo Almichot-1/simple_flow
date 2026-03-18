@@ -19,7 +19,6 @@ function validateRecoveryRequestEmail(email) {
 export default function ForgotPasswordPage() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
-  const [generatedCode, setGeneratedCode] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [isRequesting, setIsRequesting] = useState(false)
@@ -39,7 +38,6 @@ export default function ForgotPasswordPage() {
     event.preventDefault()
     setMessage('')
     setError('')
-    setGeneratedCode('')
     setDidSubmitRequest(true)
 
     const nextErrors = validateRecoveryRequestEmail(email)
@@ -56,26 +54,18 @@ export default function ForgotPasswordPage() {
       })
 
       const normalizedEmail = String(email || '').trim().toLowerCase()
-      const code = String(data?.recovery_code || '').trim()
-
-      if (!/^\d{6}$/.test(code)) {
-        setError('No one-time code was returned for this email. Please try again or request a new code.')
-        return
-      }
 
       setDidSubmitRequest(false)
       setRequestErrors({})
-      setGeneratedCode(code)
-      setMessage(`Your one-time code is ${code}. Save it and continue to reset.`)
+      setMessage('One-time code sent to your email. Check inbox/spam, then continue to reset.')
 
-      const query = new URLSearchParams({ email: normalizedEmail, code }).toString()
+      const query = new URLSearchParams({ email: normalizedEmail }).toString()
 
       navigate(`/reset-with-code?${query}`, {
         replace: true,
         state: {
           email: normalizedEmail,
-          recoveryCode: code,
-          message: 'One-time code generated. Enter it to reset your password.',
+          message: data?.message || 'One-time code sent to your email. Enter it to reset your password.',
         },
       })
     } catch (err) {
@@ -128,14 +118,6 @@ export default function ForgotPasswordPage() {
               {isRequesting ? 'Generating one-time code...' : 'Send One-Time Code'}
             </button>
           </form>
-
-          {generatedCode && (
-            <article className="card timeline-card" aria-label="Generated one-time code">
-              <h3>One-Time Code</h3>
-              <p><strong>{generatedCode}</strong></p>
-              <p className="muted">Use this 6-digit code on the reset page.</p>
-            </article>
-          )}
 
           <p className="muted">Already have a code? <Link to="/reset-with-code">Go to reset page</Link></p>
 

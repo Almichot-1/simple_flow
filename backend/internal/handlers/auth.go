@@ -318,12 +318,17 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	response := gin.H{
-		"message": "If an account exists for this email, a recovery code has been generated.",
+		"message": "If an account exists for this email, a one-time code has been sent.",
 	}
 
 	var user models.User
 	err := h.db.Where("email = ?", email).First(&user).Error
 	if err == nil {
+		if !utils.CanSendResetOTPEmail(h.cfg) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "email delivery is not configured"})
+			return
+		}
+
 		recoveryCode, codeErr := generateRecoveryCode(6)
 		if codeErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare recovery code"})
@@ -356,7 +361,10 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 			return
 		}
 
-		response["recovery_code"] = recoveryCode
+		if sendErr := utils.SendResetOTPEmail(h.cfg, email, recoveryCode, expiresAt); sendErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send one-time code email"})
+			return
+		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process recovery request"})
 		return

@@ -124,7 +124,7 @@ export default function ResetWithCodePage() {
             <h1>Reset With Code</h1>
           </div>
         </div>
-        <p>Enter your email, one-time code, and new password.</p>
+        <p>Enter your email, the 6-digit code from your email inbox, and your new password.</p>
       </header>
 
       <section className="grid two auth-grid">

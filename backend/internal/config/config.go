@@ -15,6 +15,11 @@ type Config struct {
 	AdminEmail            string
 	AdminPassword         string
 	AllowedOrigins        string
+	SMTPHost              string
+	SMTPPort              string
+	SMTPUsername          string
+	SMTPPassword          string
+	SMTPFrom              string
 	CloudinaryCloudName   string
 	CloudinaryAPIKey      string
 	CloudinaryAPISecret   string
@@ -35,6 +40,11 @@ func Load() Config {
 		AdminEmail:            getEnv("ADMIN_EMAIL", "ahmedyasine230@gmail.com"),
 		AdminPassword:         getEnv("ADMIN_PASSWORD", "0501809476Ahmed@"),
 		AllowedOrigins:        getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
+		SMTPHost:              getEnv("SMTP_HOST", ""),
+		SMTPPort:              getEnv("SMTP_PORT", "587"),
+		SMTPUsername:          getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:          getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:              getEnv("SMTP_FROM", ""),
 		CloudinaryCloudName:   getEnv("CLOUDINARY_CLOUD_NAME", ""),
 		CloudinaryAPIKey:      getEnv("CLOUDINARY_API_KEY", ""),
 		CloudinaryAPISecret:   getEnv("CLOUDINARY_API_SECRET", ""),
