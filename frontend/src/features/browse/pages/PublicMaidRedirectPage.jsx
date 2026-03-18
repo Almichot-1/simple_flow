@@ -3,7 +3,8 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../../../shared/api/client'
 import { buildWhatsAppDirectUrl, formatRelativeDate, mediaUrl } from '../../../shared/lib/helpers'
-import { getStoredToken } from '../../../shared/lib/storage'
+import { getStoredToken, getStoredUser } from '../../../shared/lib/storage'
+import { getDashboardPathForRole } from '../../../shared/routing/dashboardPath'
 
 function PublicProfileCard({ maid }) {
   const navigate = useNavigate()
@@ -34,7 +35,7 @@ function PublicProfileCard({ maid }) {
     }
 
     if (getStoredToken()) {
-      navigate('/dashboard')
+      navigate(getDashboardPathForRole(getStoredUser()?.role))
       return
     }
 

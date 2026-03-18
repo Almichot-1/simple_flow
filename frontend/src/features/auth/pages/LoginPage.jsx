@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { getFirebaseRuntimeSummary, signInWithGoogleFirebase } from '../../../shared/lib/firebase'
+import { resolveSafeRedirectPath } from '../../../shared/routing/dashboardPath'
 import brandLogo from '../../../assets/simflow-logo.svg'
 
 export default function LoginPage() {
@@ -24,15 +25,19 @@ export default function LoginPage() {
     }
   }, [location.pathname, location.search, location.state, navigate])
 
+  function getPostLoginPath(role) {
+    return resolveSafeRedirectPath(location.state?.from, role)
+  }
+
   async function onSubmit(event) {
     event.preventDefault()
     setMessage('')
     setError('')
     setIsSubmitting(true)
     try {
-      await login(form)
+      const data = await login(form)
       setMessage('Logged in successfully.')
-      navigate('/dashboard')
+      navigate(getPostLoginPath(data?.user?.role), { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -47,9 +52,9 @@ export default function LoginPage() {
     try {
       const credential = await signInWithGoogleFirebase()
       const idToken = await credential.user.getIdToken()
-      await loginWithFirebase(idToken)
+      const data = await loginWithFirebase(idToken)
       setMessage(`Google sign-in successful for ${credential.user.email}.`)
-      navigate('/dashboard')
+      navigate(getPostLoginPath(data?.user?.role), { replace: true })
     } catch (err) {
       if (err?.code === 'auth/unauthorized-domain') {
         const runtime = getFirebaseRuntimeSummary()
@@ -85,6 +90,13 @@ export default function LoginPage() {
             <div className="card">
               <h3>Profile Link Opened</h3>
               <p className="muted">Please login to continue to maid profile #{maidPromptId}.</p>
+            </div>
+          )}
+
+          {!maidPromptId && location.state?.from && (
+            <div className="card">
+              <h3>Continue where you left off</h3>
+              <p className="muted">After login, you will be redirected back to your previous page.</p>
             </div>
           )}
           <form onSubmit={onSubmit}>

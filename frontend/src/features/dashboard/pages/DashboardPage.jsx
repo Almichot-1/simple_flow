@@ -194,7 +194,6 @@ export default function DashboardPage() {
 
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [activeView, setActiveView] = useState('browse')
 
   const [filters, setFilters] = useState({ age_min: '', age_max: '', experience_min: '', lang: '', availability_status: '' })
   const [appliedFilters, setAppliedFilters] = useState({ age_min: '', age_max: '', experience_min: '', lang: '', availability_status: '' })
@@ -259,10 +258,16 @@ export default function DashboardPage() {
   const isAgency = user?.role === 'AGENCY'
   const isAdmin = user?.role === 'ADMIN'
   const isEmployer = user?.role === 'EMPLOYER'
+  const sectionPath = location.pathname.startsWith('/dashboard/admin')
+    ? 'admin'
+    : location.pathname.startsWith('/dashboard/agency')
+      ? 'agency'
+      : 'browse'
   const employerSavedKey = `employer_saved_profiles_${user?.id || 'anon'}`
   const employerContactedKey = `employer_contacted_agencies_${user?.id || 'anon'}`
-  const showBrowseView = activeView === 'browse' || isAgency
-  const showAgencyView = isAgency
+  const showBrowseView = sectionPath === 'browse'
+  const showAgencyView = sectionPath === 'agency' && isAgency
+  const showAdminView = sectionPath === 'admin' && isAdmin
 
   const routedMaidId = useMemo(() => {
     if (params.maidId && /^\d+$/.test(params.maidId)) {
@@ -603,8 +608,7 @@ export default function DashboardPage() {
         subtitle: 'Compare candidates quickly, save your shortlist, and contact trusted agencies in minutes.',
         ctaLabel: 'Browse Profiles',
         ctaAction: () => {
-          setActiveView('browse')
-          navigate('/dashboard')
+          navigate('/dashboard/browse')
           setTimeout(() => {
             document.getElementById('browse-profiles-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
           }, 60)
@@ -628,7 +632,7 @@ export default function DashboardPage() {
       subtitle: 'Approve agencies fast, monitor subscription health, and keep platform quality high every day.',
       ctaLabel: 'Review Approval Queue',
       ctaAction: () => {
-        setActiveView('admin')
+        navigate('/dashboard/admin')
         setTimeout(() => {
           document.getElementById('admin-approval-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 60)
@@ -1173,13 +1177,13 @@ export default function DashboardPage() {
   }
 
   function onOpenAllProfiles() {
-    navigate('/dashboard')
+    navigate('/dashboard/browse')
   }
 
   function onOpenMaidDetails(maid) {
     recordRecentView(maid)
     setMessage(`Opening ${maid.name} profile...`)
-    navigate(`/dashboard/maids/${maid.ID}`)
+    navigate(`/dashboard/browse/maids/${maid.ID}`)
   }
 
   function onRefreshBrowse() {
@@ -1270,13 +1274,14 @@ export default function DashboardPage() {
           <span className={`live-dot ${isDashboardBusy ? 'is-busy' : ''}`} aria-hidden="true" />
           <span>{isDashboardBusy ? 'Updating dashboard data...' : 'Dashboard is ready.'}</span>
         </div>
+        <p className="muted dashboard-context">Section: {sectionPath.toUpperCase()} · Role: {String(user?.role || '').toUpperCase()}</p>
         {user && (
           <div className="user-row">
             <span>{user.email} ({user.role})</span>
             {!isAgency && (
               <div className="dashboard-tabs" role="tablist" aria-label="Dashboard sections">
-                <button className={`btn secondary tab-btn ${activeView === 'browse' ? 'is-active' : ''}`} onClick={() => setActiveView('browse')} type="button">Browse</button>
-                {isAdmin && <button className={`btn secondary tab-btn ${activeView === 'admin' ? 'is-active' : ''}`} onClick={() => setActiveView('admin')} type="button">Admin</button>}
+                <button className={`btn secondary tab-btn ${sectionPath === 'browse' ? 'is-active' : ''}`} onClick={() => navigate('/dashboard/browse')} type="button">Browse</button>
+                {isAdmin && <button className={`btn secondary tab-btn ${sectionPath === 'admin' ? 'is-active' : ''}`} onClick={() => navigate('/dashboard/admin')} type="button">Admin</button>}
               </div>
             )}
             {isAgency ? (
@@ -1295,6 +1300,8 @@ export default function DashboardPage() {
           </article>
         ))}
       </section>
+
+      {isDashboardBusy && <p className="banner info">Processing your action and refreshing data...</p>}
 
       {isEmployer && showBrowseView && (
         <section className="grid three role-grid">
@@ -1542,6 +1549,51 @@ export default function DashboardPage() {
 
       {showAgencyView && (
         <>
+          <section className="card elevated agency-next-actions-panel">
+            <div className="section-head">
+              <h2>Agency Next Actions</h2>
+              <span className="status-tag status-live">Guided</span>
+            </div>
+            <p className="muted">Complete these steps in order to improve visibility and conversion.</p>
+            <ul className="list-clean role-list">
+              <li>
+                <span>{isWhatsappConfigured ? '✅' : '⬜'} Set WhatsApp contact</span>
+                {!isWhatsappConfigured && (
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => document.getElementById('agency-whatsapp-onboarding')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                    Set now
+                  </button>
+                )}
+              </li>
+              <li>
+                <span>{agencyMaids.length > 0 ? '✅' : '⬜'} Create your first profile</span>
+                {agencyMaids.length === 0 && (
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => {
+                    setShowAgencyForm(true)
+                    setTimeout(() => document.getElementById('agency-create-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+                  }}>
+                    Add profile
+                  </button>
+                )}
+              </li>
+              <li>
+                <span>{agencyMissingCoverage === 0 ? '✅' : '⬜'} Complete missing fields</span>
+                {agencyMissingCoverage > 0 && (
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => applyAgencyFilter('incomplete')}>
+                    Fix incomplete
+                  </button>
+                )}
+              </li>
+              <li>
+                <span>{agencyMaids.length > 0 ? '✅' : '⬜'} Share profile links</span>
+                {agencyMaids.length > 0 && (
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => copyProfileLink(agencyMaids[0].ID)}>
+                    Copy first link
+                  </button>
+                )}
+              </li>
+            </ul>
+          </section>
+
           <section className={`card elevated agency-onboarding-card ${isWhatsappConfigured ? 'is-ready' : 'is-required'}`} id="agency-whatsapp-onboarding">
             <div className="section-head">
               <h2>Employer Contact Setup</h2>
@@ -1868,7 +1920,7 @@ export default function DashboardPage() {
         </>
       )}
 
-      {isAdmin && activeView === 'admin' && (
+      {showAdminView && (
         <section className="admin-dashboard">
           <article className="admin-hero glass-panel">
             <div>
@@ -2006,7 +2058,7 @@ export default function DashboardPage() {
             {!activatedAgenciesQuery.isLoading && activatedAgencies.length === 0 && (
               <div className="empty-state">
                 <p className="muted">No activated agencies yet.</p>
-                <button className="btn secondary table-action-btn" type="button" onClick={() => setActiveView('browse')}>View Marketplace</button>
+                <button className="btn secondary table-action-btn" type="button" onClick={() => navigate('/dashboard/browse')}>View Marketplace</button>
               </div>
             )}
 
@@ -2268,7 +2320,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {isEmployer && activeView !== 'browse' && (
+      {isEmployer && !showBrowseView && (
         <section className="card">
           <p className="muted">Employers can browse and contact verified agencies from the Browse tab.</p>
         </section>
