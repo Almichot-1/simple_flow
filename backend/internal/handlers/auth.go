@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -322,7 +324,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var user models.User
 	err := h.db.Where("email = ?", email).First(&user).Error
 	if err == nil {
-		recoveryCode, codeErr := generateRecoveryCode(32)
+		recoveryCode, codeErr := generateRecoveryCode(6)
 		if codeErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare recovery code"})
 			return
@@ -417,12 +419,21 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "password reset successful"})
 }
 
-func generateRecoveryCode(byteLen int) (string, error) {
-	b := make([]byte, byteLen)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
+func generateRecoveryCode(length int) (string, error) {
+	if length <= 0 {
+		length = 6
 	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
+
+	digits := make([]byte, length)
+	for index := 0; index < length; index++ {
+		number, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			return "", err
+		}
+		digits[index] = byte('0' + number.Int64())
+	}
+
+	return fmt.Sprintf("%s", digits), nil
 }
 
 func hashRecoveryCode(code string) string {

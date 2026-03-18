@@ -44,6 +44,22 @@ func VerifyFirebaseIDToken(ctx context.Context, cfg config.Config, idToken strin
 		return nil, errors.New("missing firebase token")
 	}
 
+	if hasFirebaseServiceCredentials(cfg) {
+		client, clientErr := FirebaseAuthClient(ctx, cfg)
+		if clientErr == nil {
+			verifiedToken, verifyErr := client.VerifyIDToken(ctx, tokenString)
+			if verifyErr == nil {
+				email, _ := verifiedToken.Claims["email"].(string)
+				emailVerified, _ := verifiedToken.Claims["email_verified"].(bool)
+				return &FirebaseToken{
+					UID:           strings.TrimSpace(verifiedToken.UID),
+					Email:         strings.ToLower(strings.TrimSpace(email)),
+					EmailVerified: emailVerified,
+				}, nil
+			}
+		}
+	}
+
 	keySet, err := getFirebasePublicKeys(ctx)
 	if err != nil {
 		return nil, err
