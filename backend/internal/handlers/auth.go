@@ -372,6 +372,12 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	recoveryCode := strings.TrimSpace(req.RecoveryCode)
+	if !isSixDigitOTP(recoveryCode) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recovery code must be exactly 6 digits"})
+		return
+	}
+
 	if !utils.ValidateStrongPassword(req.NewPassword) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "password must be at least 10 characters and include uppercase, lowercase, number, and symbol"})
 		return
@@ -385,7 +391,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	tokenHash := hashRecoveryCode(req.RecoveryCode)
+	tokenHash := hashRecoveryCode(recoveryCode)
 	now := time.Now()
 
 	var resetToken models.PasswordResetToken
@@ -439,4 +445,16 @@ func generateRecoveryCode(length int) (string, error) {
 func hashRecoveryCode(code string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(code)))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func isSixDigitOTP(code string) bool {
+	if len(code) != 6 {
+		return false
+	}
+	for _, ch := range code {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }

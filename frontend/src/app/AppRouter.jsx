@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import LoginPage from '../features/auth/pages/LoginPage'
 import RegisterPage from '../features/auth/pages/RegisterPage'
 import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage'
+import ResetWithCodePage from '../features/auth/pages/ResetWithCodePage'
 import DashboardPage from '../features/dashboard/pages/DashboardPage'
 import PublicMaidRedirectPage from '../features/browse/pages/PublicMaidRedirectPage'
 import ProtectedRoute from '../shared/routing/ProtectedRoute'
@@ -29,6 +30,7 @@ export default function AppRouter() {
       <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
       <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
       <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPasswordPage /></PublicOnlyRoute>} />
+      <Route path="/reset-with-code" element={<PublicOnlyRoute><ResetWithCodePage /></PublicOnlyRoute>} />
 
       <Route path="/dashboard" element={<ProtectedRoute><DashboardRootRedirect /></ProtectedRoute>} />
       <Route
