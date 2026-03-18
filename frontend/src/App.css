@@ -297,8 +297,8 @@ li {
 
 .toast-stack {
   position: fixed;
-  left: 1rem;
-  right: auto;
+  right: 1rem;
+  left: auto;
   bottom: 1rem;
   z-index: 1200;
   display: grid;

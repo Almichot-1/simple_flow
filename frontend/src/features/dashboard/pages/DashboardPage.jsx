@@ -461,6 +461,14 @@ export default function DashboardPage() {
   }, [queryError])
 
   useEffect(() => {
+    if (!toasts.length) return undefined
+    const timeoutId = window.setTimeout(() => {
+      setToasts([])
+    }, 3000)
+    return () => window.clearTimeout(timeoutId)
+  }, [toasts])
+
+  useEffect(() => {
     const maids = browseQuery.data || []
     if (!maids.length || routedMaidId === null) return
     const target = document.getElementById(`maid-${routedMaidId}`)
