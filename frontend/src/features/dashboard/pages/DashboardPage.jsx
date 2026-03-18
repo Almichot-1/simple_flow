@@ -530,6 +530,13 @@ export default function DashboardPage() {
     () => agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
     [agencyMaids],
   )
+  const agencyFilterCounts = useMemo(() => ({
+    all: agencyMaids.length,
+    incomplete: agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
+    'missing-photo': agencyMaids.filter((maid) => !String(maid.photo_url || '').trim()).length,
+    arrived: agencyMaids.filter((maid) => String(maid.availability_status || '').toUpperCase() === 'ARRIVED').length,
+    hidden: agencyMaids.filter((maid) => !isOpenAvailabilityStatus(maid.availability_status)).length,
+  }), [agencyMaids])
 
   useEffect(() => {
     setSelectedAgencyMaidIds((prev) => prev.filter((id) => filteredAgencyMaids.some((maid) => maid.ID === id)))
@@ -1642,12 +1649,19 @@ export default function DashboardPage() {
                 <h3>Profile Filters</h3>
                 <span className="muted">Showing {filteredAgencyMaids.length} of {agencyMaids.length} profiles</span>
               </div>
-              <div className="crud-actions agency-filter-bar" role="group" aria-label="Profile filters">
-                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'all' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('all')}>All</button>
-                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'incomplete' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('incomplete')}>Incomplete</button>
-                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'missing-photo' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('missing-photo')}>Missing Photo</button>
-                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'arrived' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('arrived')}>Arrived</button>
-                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'hidden' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('hidden')}>Hidden</button>
+              <div className="agency-filter-controls" role="group" aria-label="Profile filters">
+                <label htmlFor="agency-profile-filter">Filter</label>
+                <select
+                  id="agency-profile-filter"
+                  value={agencyProfileFilter}
+                  onChange={(event) => applyAgencyFilter(event.target.value)}
+                >
+                  <option value="all">All ({agencyFilterCounts.all})</option>
+                  <option value="incomplete">Incomplete ({agencyFilterCounts.incomplete})</option>
+                  <option value="missing-photo">Missing Photo ({agencyFilterCounts['missing-photo']})</option>
+                  <option value="arrived">Arrived ({agencyFilterCounts.arrived})</option>
+                  <option value="hidden">Hidden ({agencyFilterCounts.hidden})</option>
+                </select>
               </div>
             </div>
 
