@@ -526,19 +526,6 @@ export default function DashboardPage() {
     }
     return agencyMaids
   }, [agencyMaids, agencyProfileFilter])
-  const agencyAvgHealth = useMemo(() => {
-    if (!agencyMaids.length) return 0
-    const total = agencyMaids.reduce((acc, maid) => acc + getMaidCompleteness(maid), 0)
-    return Math.round(total / agencyMaids.length)
-  }, [agencyMaids])
-  const agencyProfilesWithMedia = useMemo(() => agencyMaids.filter((maid) => maid.photo_url).length, [agencyMaids])
-  const agencyTopProfiles = useMemo(
-    () => [...agencyMaids]
-      .map((maid) => ({ ...maid, health: getMaidCompleteness(maid), missing: getMaidMissingFields(maid) }))
-      .sort((a, b) => b.health - a.health)
-      .slice(0, 4),
-    [agencyMaids],
-  )
   const agencyMissingCoverage = useMemo(
     () => agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
     [agencyMaids],
@@ -699,6 +686,18 @@ export default function DashboardPage() {
   function closeVisitorContactModal() {
     setPendingVisitorContactAction(null)
   }
+
+  useEffect(() => {
+    if (!pendingDeleteAccount) return undefined
+    const timeoutId = window.setTimeout(() => setPendingDeleteAccount(false), 6000)
+    return () => window.clearTimeout(timeoutId)
+  }, [pendingDeleteAccount])
+
+  useEffect(() => {
+    if (!pendingDeleteMaid) return undefined
+    const timeoutId = window.setTimeout(() => setPendingDeleteMaid(null), 6000)
+    return () => window.clearTimeout(timeoutId)
+  }, [pendingDeleteMaid])
 
   useEffect(() => {
     if (!pendingVisitorContactAction) return undefined
@@ -1301,8 +1300,6 @@ export default function DashboardPage() {
         ))}
       </section>
 
-      {isDashboardBusy && <p className="banner info">Processing your action and refreshing data...</p>}
-
       {isEmployer && showBrowseView && (
         <section className="grid three role-grid">
           <article className="card elevated role-panel">
@@ -1623,43 +1620,6 @@ export default function DashboardPage() {
             </form>
           </section>
 
-          <section className="grid three role-grid">
-            <article className="card elevated role-panel role-panel-action" onClick={() => applyAgencyFilter('incomplete')}>
-              <h3>Listing Health Score</h3>
-              <h2 className="role-score">{agencyAvgHealth}%</h2>
-              <p className="muted">Fill salary and languages to move toward 100%.</p>
-              <button className="btn secondary table-action-btn" type="button">Fix Incomplete Profiles</button>
-            </article>
-            <article className="card elevated role-panel role-panel-action" onClick={() => applyAgencyFilter('incomplete')}>
-              <h3>Missing Fields</h3>
-              <h2 className="role-score">{agencyMissingCoverage}</h2>
-              <p className="muted">Click to focus profiles missing key fields.</p>
-              <button className="btn secondary table-action-btn" type="button">Show Incomplete</button>
-            </article>
-            <article className="card elevated role-panel role-panel-action" onClick={() => applyAgencyFilter('missing-photo')}>
-              <h3>Profile Performance</h3>
-              <h2 className="role-score">{agencyProfilesWithMedia}/{agencyMaids.length}</h2>
-              <p className="muted">Upload photos to improve profile trust and visibility.</p>
-              <button className="btn secondary table-action-btn" type="button">Highlight Missing Photos</button>
-            </article>
-          </section>
-
-          {agencyTopProfiles.length > 0 && (
-            <section className="card elevated role-panel">
-              <div className="section-head">
-                <h3>Top Performing Profiles</h3>
-              </div>
-              <ul className="list-clean role-list">
-                {agencyTopProfiles.map((maid) => (
-                  <li key={`top-${maid.ID}`}>
-                    <span>{maid.name} • Health {maid.health}% {maid.missing.length ? `• Missing: ${maid.missing.join(', ')}` : '• Complete'}</span>
-                    <button className="btn secondary table-action-btn" type="button" onClick={() => startEditMaid(maid)}>Improve</button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
           <section className="card full" id="agency-profiles-section">
             <div className="section-head">
               <h2>My Profiles</h2>
@@ -1677,12 +1637,18 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="crud-actions agency-filter-bar" role="group" aria-label="Profile filters">
-              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'all' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('all')}>All</button>
-              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'incomplete' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('incomplete')}>Incomplete</button>
-              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'missing-photo' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('missing-photo')}>Missing Photo</button>
-              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'arrived' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('arrived')}>Arrived</button>
-              <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'hidden' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('hidden')}>Hidden</button>
+            <div className="agency-filter-section">
+              <div className="section-head">
+                <h3>Profile Filters</h3>
+                <span className="muted">Showing {filteredAgencyMaids.length} of {agencyMaids.length} profiles</span>
+              </div>
+              <div className="crud-actions agency-filter-bar" role="group" aria-label="Profile filters">
+                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'all' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('all')}>All</button>
+                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'incomplete' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('incomplete')}>Incomplete</button>
+                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'missing-photo' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('missing-photo')}>Missing Photo</button>
+                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'arrived' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('arrived')}>Arrived</button>
+                <button className={`btn secondary table-action-btn ${agencyProfileFilter === 'hidden' ? 'is-active' : ''}`} type="button" onClick={() => setAgencyProfileFilter('hidden')}>Hidden</button>
+              </div>
             </div>
 
             <div className="crud-actions bulk-actions-bar">

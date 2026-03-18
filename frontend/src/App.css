@@ -971,6 +971,14 @@ li {
   margin-bottom: 0;
 }
 
+.agency-filter-section {
+  border: 1px solid #d9e1ea;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.7rem;
+  margin-bottom: 0.7rem;
+}
+
 .role-panel-action {
   cursor: pointer;
 }
