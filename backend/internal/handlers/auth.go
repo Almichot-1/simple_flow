@@ -325,7 +325,11 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	err := h.db.Where("email = ?", email).First(&user).Error
 	if err == nil {
 		if !utils.CanSendResetOTPEmail(h.cfg) {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "email delivery is not configured"})
+			missing := strings.Join(utils.MissingSMTPFields(h.cfg), ",")
+			if missing == "" {
+				missing = "unknown"
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "email delivery is not configured", "missing": missing})
 			return
 		}
 

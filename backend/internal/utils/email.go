@@ -10,11 +10,27 @@ import (
 )
 
 func CanSendResetOTPEmail(cfg config.Config) bool {
-	return strings.TrimSpace(cfg.SMTPHost) != "" &&
-		strings.TrimSpace(cfg.SMTPPort) != "" &&
-		strings.TrimSpace(cfg.SMTPUsername) != "" &&
-		strings.TrimSpace(cfg.SMTPPassword) != "" &&
-		strings.TrimSpace(cfg.SMTPFrom) != ""
+	return len(MissingSMTPFields(cfg)) == 0
+}
+
+func MissingSMTPFields(cfg config.Config) []string {
+	missing := make([]string, 0, 5)
+	if strings.TrimSpace(cfg.SMTPHost) == "" {
+		missing = append(missing, "SMTP_HOST")
+	}
+	if strings.TrimSpace(cfg.SMTPPort) == "" {
+		missing = append(missing, "SMTP_PORT")
+	}
+	if strings.TrimSpace(cfg.SMTPUsername) == "" {
+		missing = append(missing, "SMTP_USERNAME")
+	}
+	if strings.TrimSpace(cfg.SMTPPassword) == "" {
+		missing = append(missing, "SMTP_PASSWORD")
+	}
+	if strings.TrimSpace(cfg.SMTPFrom) == "" {
+		missing = append(missing, "SMTP_FROM")
+	}
+	return missing
 }
 
 func SendResetOTPEmail(cfg config.Config, recipientEmail, otp string, expiresAt time.Time) error {
