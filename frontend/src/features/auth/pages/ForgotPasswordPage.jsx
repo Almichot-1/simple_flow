@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
 import brandLogo from '../../../assets/simflow-logo.svg'
@@ -24,6 +24,15 @@ export default function ForgotPasswordPage() {
   const [isRequesting, setIsRequesting] = useState(false)
   const [requestErrors, setRequestErrors] = useState({})
   const [didSubmitRequest, setDidSubmitRequest] = useState(false)
+
+  useEffect(() => {
+    if (!message && !error) return undefined
+    const timeoutId = window.setTimeout(() => {
+      setMessage('')
+      setError('')
+    }, 2600)
+    return () => window.clearTimeout(timeoutId)
+  }, [message, error])
 
   async function onRequestRecoveryCode(event) {
     event.preventDefault()

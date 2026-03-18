@@ -25,6 +25,15 @@ export default function LoginPage() {
     }
   }, [location.pathname, location.search, location.state, navigate])
 
+  useEffect(() => {
+    if (!message && !error) return undefined
+    const timeoutId = window.setTimeout(() => {
+      setMessage('')
+      setError('')
+    }, 2600)
+    return () => window.clearTimeout(timeoutId)
+  }, [message, error])
+
   function getPostLoginPath(role) {
     return resolveSafeRedirectPath(location.state?.from, role)
   }

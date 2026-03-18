@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../../shared/api/client'
@@ -55,6 +55,15 @@ export default function RegisterPage() {
     /[a-z]/.test(form.password) &&
     /\d/.test(form.password) &&
     /[^A-Za-z0-9]/.test(form.password)
+
+  useEffect(() => {
+    if (!message && !error) return undefined
+    const timeoutId = window.setTimeout(() => {
+      setMessage('')
+      setError('')
+    }, 2600)
+    return () => window.clearTimeout(timeoutId)
+  }, [message, error])
 
   async function onSubmit(event) {
     event.preventDefault()

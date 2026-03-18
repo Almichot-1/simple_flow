@@ -428,22 +428,22 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!message) return
     const id = Date.now() + Math.random()
-    setToasts((prev) => [...prev.filter((toast) => toast.type !== 'err'), { id, type: 'ok', text: message }])
+    setToasts([{ id, type: 'ok', text: message }])
     setMessage('')
     const timeoutId = window.setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id))
-    }, 3200)
+    }, 2600)
     return () => window.clearTimeout(timeoutId)
   }, [message])
 
   useEffect(() => {
     if (!error) return
     const id = Date.now() + Math.random()
-    setToasts((prev) => [...prev.filter((toast) => toast.type !== 'ok'), { id, type: 'err', text: error }])
+    setToasts([{ id, type: 'err', text: error }])
     setError('')
     const timeoutId = window.setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id))
-    }, 3200)
+    }, 2600)
     return () => window.clearTimeout(timeoutId)
   }, [error])
 
@@ -453,18 +453,12 @@ export default function DashboardPage() {
     if (lastQueryErrorRef.current === queryErrorMessage) return
     lastQueryErrorRef.current = queryErrorMessage
     const id = Date.now() + Math.random()
-    setToasts((prev) => [...prev, { id, type: 'err', text: queryErrorMessage }])
+    setToasts([{ id, type: 'err', text: queryErrorMessage }])
     const timeoutId = window.setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id))
-    }, 5000)
+    }, 2600)
     return () => window.clearTimeout(timeoutId)
   }, [queryError])
-
-  useEffect(() => {
-    if (!message) return
-    const timeoutId = window.setTimeout(() => setMessage(''), 3200)
-    return () => window.clearTimeout(timeoutId)
-  }, [message])
 
   useEffect(() => {
     const maids = browseQuery.data || []
@@ -512,30 +506,22 @@ export default function DashboardPage() {
   )
 
   const filteredAgencyMaids = useMemo(() => {
-    if (agencyProfileFilter === 'incomplete') {
-      return agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0)
+    if (agencyProfileFilter === 'with-narrative') {
+      return agencyMaids.filter((maid) => String(maid.narrative || '').trim().length > 0)
     }
-    if (agencyProfileFilter === 'missing-photo') {
-      return agencyMaids.filter((maid) => !String(maid.photo_url || '').trim())
-    }
-    if (agencyProfileFilter === 'arrived') {
-      return agencyMaids.filter((maid) => String(maid.availability_status || '').toUpperCase() === 'ARRIVED')
-    }
-    if (agencyProfileFilter === 'hidden') {
-      return agencyMaids.filter((maid) => !isOpenAvailabilityStatus(maid.availability_status))
+    if (agencyProfileFilter === 'without-narrative') {
+      return agencyMaids.filter((maid) => String(maid.narrative || '').trim().length === 0)
     }
     return agencyMaids
   }, [agencyMaids, agencyProfileFilter])
   const agencyMissingCoverage = useMemo(
-    () => agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
+    () => agencyMaids.filter((maid) => String(maid.narrative || '').trim().length === 0).length,
     [agencyMaids],
   )
   const agencyFilterCounts = useMemo(() => ({
     all: agencyMaids.length,
-    incomplete: agencyMaids.filter((maid) => getMaidMissingFields(maid).length > 0).length,
-    'missing-photo': agencyMaids.filter((maid) => !String(maid.photo_url || '').trim()).length,
-    arrived: agencyMaids.filter((maid) => String(maid.availability_status || '').toUpperCase() === 'ARRIVED').length,
-    hidden: agencyMaids.filter((maid) => !isOpenAvailabilityStatus(maid.availability_status)).length,
+    'with-narrative': agencyMaids.filter((maid) => String(maid.narrative || '').trim().length > 0).length,
+    'without-narrative': agencyMaids.filter((maid) => String(maid.narrative || '').trim().length === 0).length,
   }), [agencyMaids])
 
   useEffect(() => {
@@ -1580,10 +1566,10 @@ export default function DashboardPage() {
                 )}
               </li>
               <li>
-                <span>{agencyMissingCoverage === 0 ? '✅' : '⬜'} Complete missing fields</span>
+                <span>{agencyMissingCoverage === 0 ? '✅' : '⬜'} Complete profile narratives</span>
                 {agencyMissingCoverage > 0 && (
-                  <button className="btn secondary table-action-btn" type="button" onClick={() => applyAgencyFilter('incomplete')}>
-                    Fix incomplete
+                  <button className="btn secondary table-action-btn" type="button" onClick={() => applyAgencyFilter('without-narrative')}>
+                    Add narratives
                   </button>
                 )}
               </li>
@@ -1657,10 +1643,8 @@ export default function DashboardPage() {
                   onChange={(event) => applyAgencyFilter(event.target.value)}
                 >
                   <option value="all">All ({agencyFilterCounts.all})</option>
-                  <option value="incomplete">Incomplete ({agencyFilterCounts.incomplete})</option>
-                  <option value="missing-photo">Missing Photo ({agencyFilterCounts['missing-photo']})</option>
-                  <option value="arrived">Arrived ({agencyFilterCounts.arrived})</option>
-                  <option value="hidden">Hidden ({agencyFilterCounts.hidden})</option>
+                  <option value="with-narrative">With Narrative ({agencyFilterCounts['with-narrative']})</option>
+                  <option value="without-narrative">Without Narrative ({agencyFilterCounts['without-narrative']})</option>
                 </select>
               </div>
             </div>
