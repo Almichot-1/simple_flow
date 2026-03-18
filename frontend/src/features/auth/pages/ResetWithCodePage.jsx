@@ -56,6 +56,17 @@ export default function ResetWithCodePage() {
   const passwordsMatch = newPassword && confirmPassword && newPassword === confirmPassword
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const queryEmail = String(params.get('email') || '').trim().toLowerCase()
+    const queryCode = String(params.get('code') || '').trim()
+
+    if (queryEmail) {
+      setEmail(queryEmail)
+    }
+    if (queryCode) {
+      setRecoveryCode(queryCode)
+    }
+
     if (location.state?.email) {
       setEmail(String(location.state.email).trim().toLowerCase())
     }
@@ -65,7 +76,7 @@ export default function ResetWithCodePage() {
     if (location.state?.message) {
       setMessage(String(location.state.message))
     }
-  }, [location.state])
+  }, [location.search, location.state])
 
   async function onResetPassword(event) {
     event.preventDefault()
