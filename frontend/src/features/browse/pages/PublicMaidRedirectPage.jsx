@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../../../shared/api/client'
 import { buildWhatsAppDirectUrl, formatRelativeDate, mediaUrl } from '../../../shared/lib/helpers'
+import { getStoredToken } from '../../../shared/lib/storage'
 
 function PublicProfileCard({ maid }) {
+  const navigate = useNavigate()
   const [pendingContactOpen, setPendingContactOpen] = useState(false)
   const profileLink = `${window.location.origin}/maids/${maid.id}`
   const whatsappMessage = `Hello, I am interested in ${maid.name} profile. Profile link: ${profileLink}`
@@ -24,6 +26,20 @@ function PublicProfileCard({ maid }) {
       window.clearTimeout(timer)
     }
   }, [pendingContactOpen])
+
+  function onBackToBrowse() {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+
+    if (getStoredToken()) {
+      navigate('/dashboard')
+      return
+    }
+
+    navigate('/login')
+  }
 
   return (
     <main className="public-profile-page" aria-label="Public maid profile">
@@ -50,6 +66,9 @@ function PublicProfileCard({ maid }) {
               <span className="public-status">{maid.availability_status}</span>
               <span className="public-updated">{formatRelativeDate(maid.last_updated_at)}</span>
             </div>
+            <button className="btn secondary" type="button" onClick={onBackToBrowse}>
+              Back to Browse
+            </button>
             {whatsappUrl && (
               <button className="public-cta" type="button" onClick={() => setPendingContactOpen(true)}>
                 Contact Agency on WhatsApp
