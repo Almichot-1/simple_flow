@@ -696,6 +696,18 @@ export default function DashboardPage() {
     setPendingVisitorContactAction(null)
   }
 
+  useEffect(() => {
+    if (!pendingVisitorContactAction) return undefined
+
+    const timer = window.setTimeout(() => {
+      setPendingVisitorContactAction(null)
+    }, 5000)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [pendingVisitorContactAction])
+
   function confirmVisitorContactAction() {
     if (!pendingVisitorContactAction?.contactUrl) return
     recordContactedAgency(pendingVisitorContactAction.maid)

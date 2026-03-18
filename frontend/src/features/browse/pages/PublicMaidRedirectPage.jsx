@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../../../shared/api/client'
@@ -12,6 +12,18 @@ function PublicProfileCard({ maid }) {
     whatsAppUrl: maid.agency_whatsapp_url,
     message: whatsappMessage,
   })
+
+  useEffect(() => {
+    if (!pendingContactOpen) return undefined
+
+    const timer = window.setTimeout(() => {
+      setPendingContactOpen(false)
+    }, 5000)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [pendingContactOpen])
 
   return (
     <main className="public-profile-page" aria-label="Public maid profile">
