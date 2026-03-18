@@ -235,6 +235,7 @@ export default function DashboardPage() {
   const [isActivatingSubscription, setIsActivatingSubscription] = useState(false)
   const [agencyModerationInFlightId, setAgencyModerationInFlightId] = useState(null)
   const [pendingModerationAction, setPendingModerationAction] = useState(null)
+  const [pendingVisitorContactAction, setPendingVisitorContactAction] = useState(null)
   const [pendingDeleteAccount, setPendingDeleteAccount] = useState(false)
   const [pendingDeleteMaid, setPendingDeleteMaid] = useState(null)
   const [isDeletingAccount, setIsDeletingAccount] = useState(false)
@@ -684,6 +685,23 @@ export default function DashboardPage() {
       ...contactedAgencies.filter((entry) => entry.agency_ref !== agencyRef),
     ].slice(0, 20)
     persistContactedAgencies(next)
+  }
+
+  function requestVisitorContactAction(maid, contactUrl) {
+    if (!isEmployer || !contactUrl) return
+    setPendingVisitorContactAction({ maid, contactUrl })
+  }
+
+  function closeVisitorContactModal() {
+    setPendingVisitorContactAction(null)
+  }
+
+  function confirmVisitorContactAction() {
+    if (!pendingVisitorContactAction?.contactUrl) return
+    recordContactedAgency(pendingVisitorContactAction.maid)
+    window.open(pendingVisitorContactAction.contactUrl, '_blank', 'noopener,noreferrer')
+    setPendingVisitorContactAction(null)
+    setMessage('Opening agency WhatsApp contact.')
   }
 
   async function createMaid(event) {
@@ -1440,20 +1458,18 @@ export default function DashboardPage() {
                           </button>
                         )}
                         {contactUrl && (
-                          <a
+                          <button
                             className="icon-btn"
-                            href={contactUrl}
-                            target="_blank"
-                            rel="noreferrer"
                             aria-label={`Contact agency on WhatsApp for ${maid.name}`}
                             title="Contact on WhatsApp"
+                            type="button"
                             onClick={(event) => {
                               event.stopPropagation()
-                              recordContactedAgency(maid)
+                              requestVisitorContactAction(maid, contactUrl)
                             }}
                           >
                             <WhatsAppIcon />
-                          </a>
+                          </button>
                         )}
                         <button
                           className="icon-btn secondary"
@@ -2257,6 +2273,21 @@ export default function DashboardPage() {
             <div className="modal-actions">
               <button className="btn secondary" type="button" onClick={closeModerationModal}>Cancel</button>
               <button className="btn danger" type="button" onClick={confirmModerationAction}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingVisitorContactAction && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm agency contact action">
+          <div className="modal-card">
+            <h3>Contact Agency</h3>
+            <p>
+              You are about to contact the agency for <strong>{pendingVisitorContactAction.maid?.name}</strong> on WhatsApp.
+            </p>
+            <div className="modal-actions">
+              <button className="btn secondary" type="button" onClick={closeVisitorContactModal}>Cancel</button>
+              <button className="btn" type="button" onClick={confirmVisitorContactAction}>Continue</button>
             </div>
           </div>
         </div>

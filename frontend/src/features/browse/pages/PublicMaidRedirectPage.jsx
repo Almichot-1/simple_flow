@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../../../shared/api/client'
 import { buildWhatsAppDirectUrl, formatRelativeDate, mediaUrl } from '../../../shared/lib/helpers'
 
 function PublicProfileCard({ maid }) {
+  const [pendingContactOpen, setPendingContactOpen] = useState(false)
   const profileLink = `${window.location.origin}/maids/${maid.id}`
   const whatsappMessage = `Hello, I am interested in ${maid.name} profile. Profile link: ${profileLink}`
   const whatsappUrl = buildWhatsAppDirectUrl({
@@ -37,13 +39,37 @@ function PublicProfileCard({ maid }) {
               <span className="public-updated">{formatRelativeDate(maid.last_updated_at)}</span>
             </div>
             {whatsappUrl && (
-              <a className="public-cta" href={whatsappUrl} target="_blank" rel="noreferrer noopener">
+              <button className="public-cta" type="button" onClick={() => setPendingContactOpen(true)}>
                 Contact Agency on WhatsApp
-              </a>
+              </button>
             )}
           </div>
         </article>
       </div>
+
+      {pendingContactOpen && whatsappUrl && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm agency contact action">
+          <div className="modal-card">
+            <h3>Contact Agency</h3>
+            <p>
+              You are about to contact this agency on WhatsApp about <strong>{maid.name}</strong>.
+            </p>
+            <div className="modal-actions">
+              <button className="btn secondary" type="button" onClick={() => setPendingContactOpen(false)}>Cancel</button>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => {
+                  window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+                  setPendingContactOpen(false)
+                }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
