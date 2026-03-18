@@ -41,7 +41,7 @@ func SendResetOTPEmail(cfg config.Config, recipientEmail, otp string, expiresAt 
 	host := strings.TrimSpace(cfg.SMTPHost)
 	port := strings.TrimSpace(cfg.SMTPPort)
 	username := strings.TrimSpace(cfg.SMTPUsername)
-	password := strings.TrimSpace(cfg.SMTPPassword)
+	password := normalizeSMTPPassword(host, cfg.SMTPPassword)
 	from := strings.TrimSpace(cfg.SMTPFrom)
 	to := strings.ToLower(strings.TrimSpace(recipientEmail))
 	if to == "" {
@@ -67,5 +67,19 @@ func SendResetOTPEmail(cfg config.Config, recipientEmail, otp string, expiresAt 
 
 	auth := smtp.PlainAuth("", username, password, host)
 	addr := host + ":" + port
-	return smtp.SendMail(addr, auth, from, []string{to}, []byte(message))
+	if err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message)); err != nil {
+		return fmt.Errorf("smtp send failed: %w", err)
+	}
+
+	return nil
+}
+
+func normalizeSMTPPassword(host, rawPassword string) string {
+	password := strings.TrimSpace(rawPassword)
+
+	if strings.Contains(strings.ToLower(strings.TrimSpace(host)), "gmail.com") {
+		password = strings.ReplaceAll(password, " ", "")
+	}
+
+	return password
 }
