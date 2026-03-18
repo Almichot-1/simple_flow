@@ -366,7 +366,10 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		}
 
 		if sendErr := utils.SendResetOTPEmail(h.cfg, email, recoveryCode, expiresAt); sendErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send one-time code email"})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "failed to send one-time code email",
+				"details": sendErr.Error(),
+			})
 			return
 		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
