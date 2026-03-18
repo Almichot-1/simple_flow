@@ -12,6 +12,7 @@ function PublicProfileCard({ maid }) {
   const profileLink = `${window.location.origin}/maids/${maid.id}`
   const whatsappMessage = `Hello, I am interested in ${maid.name} profile. Profile link: ${profileLink}`
   const whatsappUrl = buildWhatsAppDirectUrl({
+    phone: maid.agency_phone || maid.agency_whatsapp,
     whatsAppUrl: maid.agency_whatsapp_url,
     message: whatsappMessage,
   })

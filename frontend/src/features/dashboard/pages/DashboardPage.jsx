@@ -428,22 +428,22 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!message) return
     const id = Date.now() + Math.random()
-    setToasts((prev) => [...prev, { id, type: 'ok', text: message }])
+    setToasts((prev) => [...prev.filter((toast) => toast.type !== 'err'), { id, type: 'ok', text: message }])
     setMessage('')
     const timeoutId = window.setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id))
-    }, 4000)
+    }, 3200)
     return () => window.clearTimeout(timeoutId)
   }, [message])
 
   useEffect(() => {
     if (!error) return
     const id = Date.now() + Math.random()
-    setToasts((prev) => [...prev, { id, type: 'err', text: error }])
+    setToasts((prev) => [...prev.filter((toast) => toast.type !== 'ok'), { id, type: 'err', text: error }])
     setError('')
     const timeoutId = window.setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id))
-    }, 5000)
+    }, 3200)
     return () => window.clearTimeout(timeoutId)
   }, [error])
 

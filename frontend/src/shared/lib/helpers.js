@@ -10,6 +10,25 @@ export function normalizePhoneToDigits(phone) {
   return String(phone || '').replace(/\D/g, '')
 }
 
+function isLikelyUrl(value) {
+  const text = String(value || '').trim().toLowerCase()
+  return text.startsWith('http://') || text.startsWith('https://') || text.startsWith('whatsapp://')
+}
+
+function appendMessageToUrl(url, message) {
+  const fallback = String(url || '').trim()
+  if (!fallback) return ''
+  if (!message) return fallback
+
+  try {
+    const parsed = new URL(fallback)
+    parsed.searchParams.set('text', message)
+    return parsed.toString()
+  } catch {
+    return fallback
+  }
+}
+
 export function buildWhatsAppUrlFromPhone(phone, message) {
   const digits = normalizePhoneToDigits(phone)
   if (!digits) return ''
@@ -35,24 +54,16 @@ function extractPhoneFromWhatsAppUrl(whatsAppUrl) {
 }
 
 export function buildWhatsAppDirectUrl({ phone, whatsAppUrl, message }) {
-  const directFromPhone = buildWhatsAppUrlFromPhone(phone, message)
+  const normalizedPhoneInput = isLikelyUrl(phone) ? '' : phone
+
+  const directFromPhone = buildWhatsAppUrlFromPhone(normalizedPhoneInput, message)
   if (directFromPhone) return directFromPhone
 
-  const extractedPhone = extractPhoneFromWhatsAppUrl(whatsAppUrl)
+  const extractedPhone = extractPhoneFromWhatsAppUrl(phone) || extractPhoneFromWhatsAppUrl(whatsAppUrl)
   const directFromUrlPhone = buildWhatsAppUrlFromPhone(extractedPhone, message)
   if (directFromUrlPhone) return directFromUrlPhone
 
-  const fallback = String(whatsAppUrl || '').trim()
-  if (!fallback) return ''
-  if (!message) return fallback
-
-  try {
-    const parsed = new URL(fallback)
-    parsed.searchParams.set('text', message)
-    return parsed.toString()
-  } catch {
-    return fallback
-  }
+  return appendMessageToUrl(whatsAppUrl || phone, message)
 }
 
 export function buildWhatsAppShareUrl(message) {
